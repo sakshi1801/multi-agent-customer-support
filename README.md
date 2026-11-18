@@ -4,7 +4,7 @@
 
 A supervisor-based multi-agent system built with **LangGraph**, served via **FastAPI**. A supervisor LLM routes each customer message to specialist agents (orders, FAQ, escalation). Escalations pause the graph and wait for a **human agent** (human-in-the-loop), then resume.
 
-**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Azure OpenAI / OpenAI · LangSmith · pytest · Ruff · Docker · GitHub Actions
+**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Azure OpenAI / OpenAI / OpenRouter · LangSmith · pytest · Ruff · Docker · GitHub Actions
 
 ## Architecture
 
@@ -29,14 +29,14 @@ flowchart TD
 - **Multi-agent in one turn**: "Status of ORD-1005 and what's your return policy?" visits Orders, then FAQ.
 - **Human-in-the-loop**: `interrupt()` + a checkpointer pause the conversation; `Command(resume=...)` continues it.
 - **Safety**: hop limit prevents routing loops; only `processing` orders can be cancelled; the ticket is created once (creation and `interrupt()` live in separate nodes because a node re-runs on resume).
-- **Testable**: 20 tests run with a deterministic fake LLM, so CI needs no API key.
+- **Testable**: 24 tests run with a deterministic fake LLM, so CI needs no API key.
 
 ## Quick start
 
 ```bash
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                                   # add your key (OpenAI or Azure OpenAI)
+cp .env.example .env                                   # add ONE key: OpenAI, OpenRouter or Azure OpenAI
 uvicorn app.main:app --reload
 ```
 
@@ -69,7 +69,7 @@ Demo data: orders `ORD-1001` to `ORD-1005` for `asha@`, `ravi@`, `meera@example.
 
 ```bash
 pip install -r requirements-dev.txt         # adds pytest and ruff
-pytest -q                                   # 20 tests, no API key needed
+pytest -q                                   # 24 tests, no API key needed
 ruff check . && ruff format --check .       # lint + formatting (also run in CI)
 docker build -t support-agents . && docker run --env-file .env -p 8000:8000 support-agents
 ```
@@ -79,7 +79,7 @@ Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` in `.env` to see every supe
 ## Project layout
 
 ```
-app/config.py   LLM setup (Azure OpenAI or OpenAI)
+app/config.py   LLM setup (Azure OpenAI, OpenRouter or OpenAI)
 app/db.py       SQLite schema + demo data
 app/tools.py    agent tools
 app/graph.py    supervisor + specialists + human-in-the-loop
