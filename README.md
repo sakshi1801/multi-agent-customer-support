@@ -1,8 +1,10 @@
 # Multi-Agent Customer Support System
 
+[![CI](https://github.com/sakshi1801/multi-agent-customer-support/actions/workflows/ci.yml/badge.svg)](https://github.com/sakshi1801/multi-agent-customer-support/actions/workflows/ci.yml)
+
 A supervisor-based multi-agent system built with **LangGraph**, served via **FastAPI**. A supervisor LLM routes each customer message to specialist agents (orders, FAQ, escalation). Escalations pause the graph and wait for a **human agent** (human-in-the-loop), then resume.
 
-**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Azure OpenAI / OpenAI · LangSmith · pytest · Docker · GitHub Actions
+**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Azure OpenAI / OpenAI · LangSmith · pytest · Ruff · Docker · GitHub Actions
 
 ## Architecture
 
@@ -66,7 +68,9 @@ Demo data: orders `ORD-1001` to `ORD-1005` for `asha@`, `ravi@`, `meera@example.
 ## Tests, Docker, tracing
 
 ```bash
+pip install -r requirements-dev.txt         # adds pytest and ruff
 pytest -q                                   # 20 tests, no API key needed
+ruff check . && ruff format --check .       # lint + formatting (also run in CI)
 docker build -t support-agents . && docker run --env-file .env -p 8000:8000 support-agents
 ```
 
@@ -81,6 +85,7 @@ app/tools.py    agent tools
 app/graph.py    supervisor + specialists + human-in-the-loop
 app/main.py     FastAPI endpoints and schemas
 tests/          fake-LLM tests for tools, routing, escalation, API
+docs/           development plan
 ```
 
 ## Evaluation
@@ -89,6 +94,9 @@ tests/          fake-LLM tests for tools, routing, escalation, API
 > routing accuracy on N hand-written test messages: **__ / __**, with a LangSmith trace screenshot.
 
 ## Known limitations / next steps
+
+See [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) for the full roadmap.
+
 
 - `MemorySaver` is in-memory: use a Postgres or SQLite checkpointer for production.
 - The FAQ search is keyword-based; swap in embeddings + pgvector for larger knowledge bases.
