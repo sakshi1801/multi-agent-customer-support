@@ -1,5 +1,6 @@
 """Tools the specialist agents can call. Plain functions + @tool decorator."""
 import re
+from pathlib import Path
 
 from langchain_core.tools import tool
 
@@ -44,7 +45,7 @@ def cancel_order(order_id: str) -> dict:
 
 # ---------- FAQ agent tool ----------
 def _load_faq_sections() -> list[tuple[str, str]]:
-    text = open(config.FAQ_PATH, encoding="utf-8").read()
+    text = Path(config.FAQ_PATH).read_text(encoding="utf-8")
     parts = re.split(r"^# (.+)$", text, flags=re.MULTILINE)
     # parts = ['', title1, body1, title2, body2, ...]
     return [(parts[i].strip(), parts[i + 1].strip()) for i in range(1, len(parts) - 1, 2)]

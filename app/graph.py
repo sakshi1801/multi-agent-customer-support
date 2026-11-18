@@ -14,10 +14,10 @@
 """
 from typing import Callable, Literal
 
+from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.prebuilt import create_react_agent
 from langgraph.types import interrupt
 from pydantic import BaseModel, Field
 
@@ -96,8 +96,8 @@ def build_graph(llm=None, router: Callable[[list], str] | None = None, checkpoin
         llm = get_llm()
     router = router or make_llm_router(llm)
 
-    orders_agent = create_react_agent(llm, tools.ORDER_TOOLS, prompt=ORDERS_PROMPT)
-    faq_agent = create_react_agent(llm, tools.FAQ_TOOLS, prompt=FAQ_PROMPT)
+    orders_agent = create_agent(llm, tools.ORDER_TOOLS, system_prompt=ORDERS_PROMPT)
+    faq_agent = create_agent(llm, tools.FAQ_TOOLS, system_prompt=FAQ_PROMPT)
 
     # ---- nodes ----
     def supervisor(state: SupportState) -> dict:
