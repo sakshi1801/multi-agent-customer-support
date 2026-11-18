@@ -1,9 +1,8 @@
 """Shared fixtures: temp DB, a rule-based fake LLM (no API key needed) and a keyword router."""
-import os
+
 import re
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient

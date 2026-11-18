@@ -1,4 +1,5 @@
 """Tools the specialist agents can call. Plain functions + @tool decorator."""
+
 import re
 from pathlib import Path
 
@@ -12,9 +13,7 @@ from app import config, db
 def get_order_status(order_id: str) -> dict:
     """Look up one order by its ID (e.g. ORD-1001). Returns item, status, total and ETA."""
     with db.connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM orders WHERE order_id = ?", (order_id.strip().upper(),)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id.strip().upper(),)).fetchone()
     return dict(row) if row else {"error": f"No order found with ID {order_id}"}
 
 

@@ -37,9 +37,7 @@ def test_cancel_processing_order(client):
 
 # ---------- multi-agent in one turn ----------
 def test_two_part_question_visits_both_specialists(client):
-    r = client.post(
-        "/chat", json={"message": "Status of ORD-1005, and what is the shipping policy?"}
-    ).json()
+    r = client.post("/chat", json={"message": "Status of ORD-1005, and what is the shipping policy?"}).json()
     assert agents(r) == ["orders", "faq"]
 
 

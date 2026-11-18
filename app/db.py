@@ -1,4 +1,5 @@
 """Tiny SQLite layer: customers' orders and escalation tickets (demo data)."""
+
 import sqlite3
 from contextlib import contextmanager
 

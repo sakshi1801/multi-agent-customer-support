@@ -4,6 +4,7 @@ Uses Azure OpenAI when AZURE_OPENAI_ENDPOINT is set, otherwise plain OpenAI.
 LangSmith tracing turns on automatically when LANGSMITH_TRACING=true and
 LANGSMITH_API_KEY are in your .env (no code changes needed).
 """
+
 import os
 
 from dotenv import load_dotenv

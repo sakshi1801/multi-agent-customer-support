@@ -1,0 +1,10 @@
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: pycodestyle + pyflakes, I: import order, B: bugbear, UP: modern syntax, SIM: simplifications
+select = ["E", "F", "I", "B", "UP", "SIM"]
+# Line length is enforced by `ruff format` on code; E501 would only flag long LLM prompt strings,
+# and wrapping those would change the text the model sees.
+ignore = ["E501"]

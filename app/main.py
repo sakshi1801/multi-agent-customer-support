@@ -5,6 +5,7 @@ POST /tickets/{thread}/reply  a human agent answers an escalated thread
 GET  /tickets               open tickets (for a human-agent dashboard)
 GET  /health
 """
+
 import uuid
 from contextlib import asynccontextmanager
 

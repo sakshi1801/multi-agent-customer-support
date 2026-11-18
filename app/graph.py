@@ -1,18 +1,20 @@
 """Supervisor multi-agent graph for customer support.
 
-        START
-          |
-      supervisor  <-----------------+
-       /   |    \\                   |
-  orders  faq  escalate             |  (each specialist returns to the
-     |     |      |                 |   supervisor, max MAX_HOPS hops)
-     +-----+      v                 |
-     |        human_review  --------+     <- pauses with interrupt() until a
-     |        (human-in-the-loop)            human agent replies
-     +----------------------------+
-                                   FINISH -> END
+      START
+        |
+    supervisor  <-----------------+
+     /   |    \\                   |
+orders  faq  escalate             |  (each specialist returns to the
+   |     |      |                 |   supervisor, max MAX_HOPS hops)
+   +-----+      v                 |
+   |        human_review  --------+     <- pauses with interrupt() until a
+   |        (human-in-the-loop)            human agent replies
+   +----------------------------+
+                                 FINISH -> END
 """
-from typing import Callable, Literal
+
+from collections.abc import Callable
+from typing import Literal
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage

@@ -1,9 +1,9 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-langgraph>=1.0
-langchain-core>=1.0
-langchain-openai>=1.0
-pydantic>=2.7
-python-dotenv>=1.0
-httpx>=0.27
-pytest>=8.0
+# Runtime dependencies. Upper bounds stop a future major release from breaking a fresh install.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+langgraph>=1.0,<2
+langchain>=1.0,<2
+langchain-core>=1.0,<2
+langchain-openai>=1.0,<2
+pydantic>=2.7,<3
+python-dotenv>=1.0,<2
