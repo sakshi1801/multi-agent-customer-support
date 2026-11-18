@@ -5,7 +5,18 @@ from langchain_openai import ChatOpenAI
 
 from app import config
 
-PROVIDER_VARS = ("AZURE_OPENAI_ENDPOINT", "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENAI_MODEL")
+PROVIDER_VARS = (
+    "LLM_PROVIDER",
+    "AZURE_OPENAI_ENDPOINT",
+    "GROQ_API_KEY",
+    "GROQ_MODEL",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_MODEL",
+    "LLM_BASE_URL",
+    "LLM_API_KEY",
+    "LLM_MODEL",
+    "OPENAI_MODEL",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -25,20 +36,58 @@ def test_defaults_to_openai():
 
 def test_openrouter_key_switches_base_url_and_model(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setenv("OPENROUTER_MODEL", "anthropic/claude-haiku-4.5")
+    monkeypatch.setenv("OPENROUTER_MODEL", "nvidia/nemotron-3.5-super-vl:free")
     llm = config.get_llm()
     assert config.get_provider() == "openrouter"
     assert llm.openai_api_base == config.OPENROUTER_BASE_URL
-    assert llm.model_name == "anthropic/claude-haiku-4.5"
+    assert llm.model_name == "nvidia/nemotron-3.5-super-vl:free"
     assert llm.openai_api_key.get_secret_value() == "sk-or-test"  # not the OpenAI key
 
 
-def test_openrouter_default_model(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    assert config.get_llm().model_name == "openai/gpt-4o-mini"
+def test_groq_key_selects_groq_with_default_model(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    llm = config.get_llm()
+    assert config.get_provider() == "groq"
+    assert llm.openai_api_base == config.GROQ_BASE_URL
+    assert llm.model_name == "openai/gpt-oss-120b"
+    assert llm.openai_api_key.get_secret_value() == "gsk-test"
 
 
-def test_azure_takes_priority_over_openrouter(monkeypatch):
+def test_groq_wins_over_openrouter_when_both_keys_are_set(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    assert config.get_provider() == "groq"
+
+
+def test_llm_provider_overrides_auto_detection(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("LLM_PROVIDER", "OpenRouter")  # case-insensitive
+    assert config.get_llm().openai_api_base == config.OPENROUTER_BASE_URL
+
+
+def test_unknown_llm_provider_is_rejected(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "nope")
+    with pytest.raises(ValueError, match="not one of"):
+        config.get_provider()
+
+
+def test_custom_base_url_for_local_ollama(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("LLM_MODEL", "qwen3:4b")
+    llm = config.get_llm()
+    assert config.get_provider() == "custom"
+    assert llm.openai_api_base == "http://localhost:11434/v1"
+    assert llm.model_name == "qwen3:4b"
+
+
+def test_custom_provider_requires_a_model(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    with pytest.raises(ValueError, match="LLM_MODEL"):
+        config.get_llm()
+
+
+def test_azure_takes_priority_over_other_keys(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
     assert config.get_provider() == "azure"
