@@ -70,8 +70,11 @@ Reply in 1-3 friendly, concise sentences."""
 
 
 def make_llm_router(llm) -> Callable[[list], str]:
-    """Router that asks the LLM for a structured Route decision."""
-    structured = llm.with_structured_output(Route)
+    """Router that asks the LLM for a structured Route decision.
+
+    Uses tool calling to get the structured output: unlike JSON-schema mode, it works
+    on any model that supports tools (OpenAI, Azure, and most OpenRouter models)."""
+    structured = llm.with_structured_output(Route, method="function_calling")
 
     def route(messages: list) -> str:
         decision = structured.invoke([SystemMessage(SUPERVISOR_PROMPT), *messages])

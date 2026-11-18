@@ -105,8 +105,9 @@ def test_llm_router_returns_structured_choice():
             return Route(next="faq")
 
     class StubLLM:
-        def with_structured_output(self, schema):
+        def with_structured_output(self, schema, method=None):
             assert schema is Route
+            assert method == "function_calling"  # portable across providers
             return StubStructured()
 
     route = make_llm_router(StubLLM())
