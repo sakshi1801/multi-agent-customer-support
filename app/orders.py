@@ -11,7 +11,10 @@ NOT_SIGNED_IN = {"error": "The customer is not signed in. Ask them to log in to 
 
 
 def _not_found(order_id: str) -> dict:
-    return {"error": f"No order {order_id.strip().upper()} was found on this customer's account."}
+    return {
+        "error": f"Order {order_id.strip().upper()} was not found among the orders of the signed-in customer. "
+        "The customer IS signed in; tell them this order is not on their account."
+    }
 
 
 def lookup(customer_email: str, order_id: str) -> dict:

@@ -182,13 +182,16 @@
     $("chat-error").textContent = "";
     setWaiting(null);
   }
-  $("who").addEventListener("change", signIn);
+  // Sending waits for the sign-in request, otherwise a fast message would go out anonymously.
+  let ready = Promise.resolve();
+  $("who").addEventListener("change", () => { ready = signIn(); });
   $("new-chat").addEventListener("click", resetChat);
 
   $("chat-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const message = $("message").value.trim();
     if (!message) return;
+    await ready;
     $("chat-error").textContent = "";
     $("send").disabled = true;
     $("log").append(bubble("customer", message));
