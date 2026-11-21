@@ -2,7 +2,7 @@
 
 **Goal:** turn the existing prototype into a project that holds up in an interview. It should be secure, measured with real evaluation numbers, deployed on Azure, and backed by a clear commit history. The numbers we measure become the resume bullet points.
 
-**Status (21 Nov 2026):** Phases 0 and 1 are done and verified (see section 1c). Phase 2 (evaluation) is next.
+**Status (21 Nov 2026):** Phases 0 to 4 are built and verified; Phase 5 (documentation) is in progress. Results are in [EVALUATION.md](EVALUATION.md), the interview preparation in [INTERVIEW_NOTES.md](INTERVIEW_NOTES.md), deployment in [DEPLOY.md](DEPLOY.md). Section 7 lists what changed from the original plan and why.
 
 ---
 
@@ -132,7 +132,7 @@ Tests grew from 20 to 67; CI stays key-free. Live runs used Groq `openai/gpt-oss
 
 **Done when:** F1–F7 are fixed and each has a test, and the adversarial tests pass.
 
-### Phase 2: Evaluation harness (≈ 2 days). The most important phase for the resume
+### Phase 2: Evaluation harness ✅ DONE. The most important phase for the resume
 
 This is what turns "I built an agent" into "I built and measured an agent".
 
@@ -152,7 +152,7 @@ This is what turns "I built an agent" into "I built and measured an agent".
 
 **Done when:** the baseline report exists with real numbers, and the LangSmith experiment link works.
 
-### Phase 3: Improvements driven by the eval (≈ 3–4 days, each one measured against the baseline)
+### Phase 3: Improvements driven by the eval ✅ DONE (each one measured against the baseline)
 
 Every item below gets a before/after row in the README.
 
@@ -165,7 +165,7 @@ Every item below gets a before/after row in the README.
 
 The order is flexible. Once the baseline shows the weakest metric, we fix that first.
 
-### Phase 4: Demo, deployment and observability (≈ 2 days)
+### Phase 4: Demo, deployment and observability ✅ DONE except the live public URL (needs the owner's hosting account)
 
 | Step | What | Why |
 |---|---|---|
@@ -177,7 +177,7 @@ The order is flexible. Once the baseline shows the weakest metric, we fix that f
 
 **Done when:** there's a live URL (or a recorded demo if hosting costs are a concern), and the GIF is in the README.
 
-### Phase 5: Documentation and resume (≈ 1 day)
+### Phase 5: Documentation and resume (in progress)
 
 | Step | What |
 |---|---|
@@ -220,3 +220,21 @@ We'll keep the bullet points that the numbers support and drop the rest. Three s
 - Adding CrewAI or a second framework to the same project. It makes the story less focused, not stronger.
 - Adding many more specialist agents (billing, shipping, …) before the evaluation exists. More agents without measurement doesn't make the project more impressive.
 - Putting any metric on the resume before it's in a committed eval report.
+
+---
+
+## 7. What changed from the plan, and why (21 Nov 2026)
+
+| Plan said | What happened | Why |
+|---|---|---|
+| Use Azure OpenAI and LangSmith | Groq free tier (three models), OpenRouter `:free` as a backup, a local Ollama model; LangSmith tracing supported through environment variables but no LangSmith results are claimed | The project had to cost nothing. Provider code is a small table, so Azure remains a one-line switch. |
+| ~150 test cases | 132 hand-labelled cases, 32 with end-to-end checks | Quality of labels over quantity; free-tier token limits (about 8K tokens a minute, 200K a day per model) bound how many real runs are possible. |
+| Hybrid search + reranker for the FAQ | Built and measured; **plain vector search won** (hit@3 92.7% against 53.7% for keyword overlap), so hybrid and reranking are documented alternatives, not the default | Measured on 41 questions written to share few words with their answers. |
+| Router tuning with few-shot examples | A structural change instead: a **planner** supervisor that asks the model once (1.0 calls per message instead of 1.78) | Cheaper and faster, and it did not need prompts fitted to the failures of a small dataset. |
+| Guardrails (injection detection, PII masking) | Optional Llama Prompt Guard layer, measured: 25% recall at no false refusals, so it is off by default; the real defence is the tool-level ownership check | An honest measurement beat a claim. PII masking was not built (the demo data is fake). |
+| Streamlit UI | One self-contained HTML page served by FastAPI | No extra dependency or build step; works on any free host. |
+| Azure deployment | Dockerfile verified by CI (image build + container smoke test) and a deploy guide for Hugging Face Spaces and Render | Creating a hosting account needs the owner; everything else is ready. |
+
+Problems found *after* the plan was written, by running the system, and fixed: greetings got no reply
+(small-talk wrap-up), a sign-in race in the demo page, a small model reading "order not found" as "not logged in",
+a planner crash when a small model skipped the tool call, and a harness bug that left database connections open.

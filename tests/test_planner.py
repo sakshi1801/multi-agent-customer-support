@@ -124,3 +124,11 @@ def test_a_real_question_does_not_get_the_small_talk_reply(client):
     h = login(client, "asha@example.com")
     r = client.post("/chat", json={"message": "Where is ORD-1001?"}, headers=h).json()
     assert agents(r) == ["orders"]  # no 'assistant' reply tacked on
+
+
+def test_planner_that_skips_the_tool_call_means_no_specialist():
+    class SilentLLM:
+        def with_structured_output(self, schema, method=None):
+            return RunnableLambda(lambda _prompt: None)
+
+    assert make_llm_planner(SilentLLM())([HumanMessage("Hi")]) == []

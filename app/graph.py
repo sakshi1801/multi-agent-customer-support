@@ -148,7 +148,13 @@ def make_llm_planner(llm) -> Callable[[list], list[str]]:
     chain = prompt | llm.with_structured_output(Plan, method="function_calling")
 
     def plan(messages: list) -> list[str]:
-        return list(chain.invoke({"messages": messages}).agents)
+        result = chain.invoke({"messages": messages})
+        if result is None:
+            # The model answered in plain text instead of calling the Plan tool (small local models do this
+            # for greetings). No tool call means it chose no specialist, so the wrap-up node replies.
+            logger.warning("planner returned no structured plan; treating it as 'no specialist needed'")
+            return []
+        return list(result.agents)
 
     return plan
 
