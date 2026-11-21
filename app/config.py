@@ -93,15 +93,24 @@ def get_llm():
     return primary.with_fallbacks(fallbacks) if fallbacks else primary
 
 
-def build_llm(provider: str):
-    """Construct the chat model for one named provider."""
+def build_llm(provider: str, model: str | None = None, max_retries: int | None = None):
+    """Construct the chat model for one named provider.
+
+    model        overrides the model name from the environment (used by the evaluation runs)
+    max_retries  how often the client retries rate-limit and server errors before giving up
+                 (default: LLM_MAX_RETRIES, else 2). LLM_REASONING_EFFORT=low|medium|high is passed
+                 to reasoning models such as gpt-oss: "low" gives much cheaper routing decisions.
+    """
+    retries = max_retries if max_retries is not None else int(os.getenv("LLM_MAX_RETRIES", "2"))
+    effort = os.getenv("LLM_REASONING_EFFORT") or None
     if provider == "azure":
         from langchain_openai import AzureChatOpenAI
 
         return AzureChatOpenAI(
-            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
+            azure_deployment=model or os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21"),
             temperature=0,
+            max_retries=retries,
         )
 
     from langchain_openai import ChatOpenAI
@@ -111,11 +120,20 @@ def build_llm(provider: str):
         # (the supervisor gets its routing decision through a tool call).
         p = COMPATIBLE_PROVIDERS[provider]
         base_url = p.base_url or os.environ["LLM_BASE_URL"]
-        model = os.getenv(p.model_env) or p.default_model
-        if not model:
+        name = model or os.getenv(p.model_env) or p.default_model
+        if not name:
             raise ValueError(f"Set {p.model_env} for the {provider!r} provider")
         # Local servers such as Ollama ignore the key, but the client requires a non-empty one.
         api_key = os.getenv(p.key_env) or "not-needed"
-        return ChatOpenAI(model=model, api_key=api_key, base_url=base_url, temperature=0)
+        return ChatOpenAI(
+            model=name,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=0,
+            max_retries=retries,
+            reasoning_effort=effort,
+        )
 
-    return ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), temperature=0)
+    return ChatOpenAI(
+        model=model or os.getenv("OPENAI_MODEL", "gpt-4o-mini"), temperature=0, max_retries=retries
+    )
