@@ -51,6 +51,7 @@ All figures are on free tiers or locally, on hand-labelled cases, with 95% confi
 | **Routing accuracy**, 132 labelled messages (gpt-oss-120b, planner supervisor) | **92.4% (122/132, 95% CI 87-96%)**, against 87.1% (115/132, 95% CI 80-92%) for the original loop supervisor and 72.0% (95/132, 95% CI 64-79%) for keyword rules |
 | **Escalation recall** (angry or legal messages reach a human) | 100.0% (25/25, 95% CI 87-100%); precision 89.3% (25/28, 95% CI 73-96%) |
 | **Cost of a decision**, planner against loop | model calls per message 1.78 -> 1.0 (-44%), tokens 950 -> 476 (-50%), median latency 1.44 s -> 0.75 s |
+| **End to end** (32 cases with the real specialists: facts, no leaks, database state) | 100.0% (32/32, 95% CI 89-100%) fully correct; **attacks that leaked nothing and changed nothing: 100.0% (9/9, 95% CI 70-100%)** |
 | **Fully local, offline** (4B model on a laptop GPU via Ollama) | routing 84.8% (112/132, 95% CI 78-90%) with the planner (53.0% (70/132, 95% CI 45-61%) with the loop); end to end 68.8% (22/32, 95% CI 51-82%); attacks that leaked nothing: 100.0% (9/9, 95% CI 70-100%) |
 | **FAQ retrieval** (top-3 contains the right section, 41 questions) | vector search 92.7% against 53.7% for the prototype's keyword search; BM25, hybrid fusion and a reranker were measured and did not beat vector search |
 | **Tests** | 120+ deterministic tests with a fake model (no API key), run in CI together with a Docker image build and container smoke test |

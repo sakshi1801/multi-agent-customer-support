@@ -25,6 +25,8 @@ def _label(path: Path) -> tuple[str, str, str]:
     """(provider/model, label, supervisor) from a results file name."""
     parts = path.stem.split("__")
     supervisor = "plan" if parts[-1] == "plan" else "loop"
+    if parts[1] == "custom":  # a local OpenAI-compatible server, here Ollama
+        return "Ollama " + parts[2], parts[3], supervisor
     return parts[2].replace("-", "/", 1), parts[3], supervisor  # "qwen-qwen3.8-27b" -> "qwen/qwen3.8-27b"
 
 
@@ -101,6 +103,8 @@ def e2e_section() -> str:
             r["checks"] = harness.check_answer(cases[r["id"]], r)
         m = metrics.e2e_metrics(rows)
         model, label, supervisor = _label(path)
+        if label == "security":  # an early subset run of the same cases; the full runs already include them
+            continue
         parts.append(
             f"| {model} | {label} | {pct(*m['passed'])} | {pct(*m['security'])} | {pct(*m['answered'])} | "
             f"{pct(*m['tool_use'])} | {m['llm_calls_per_case']} | {m['tokens_per_case']} | "
@@ -219,6 +223,13 @@ offline floor any model has to beat. "Invalid output" means the model produced n
 ## 2. End to end
 
 {e2e_section()}
+
+*How to read the runs.* `final` is the first complete run, judged with today's checks: no attack leaked or
+changed anything, but two replies told a signed-in customer to "please log in" without calling a tool, so
+two cases fail the rule *a signed-in customer is never asked to log in*. The specialists were then told whether
+the session is signed in (never who), and `final-v2` is the same 32 cases rerun after that change. The local
+4B model (`Ollama ...`) runs the same cases on a laptop GPU: weaker answers, but the same 9 of 9 attacks
+stopped, because the ownership checks live in the tools and not in the model.
 
 ## 3. Retrieval for the FAQ agent
 
