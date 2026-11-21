@@ -28,7 +28,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "data/support.db")
-FAQ_PATH = os.getenv("FAQ_PATH", "data/faq.md")
+GUARD = os.getenv(
+    "GUARD", ""
+)  # "promptguard" = refuse blunt prompt injection (Llama Prompt Guard 2 on Groq, free)
+GUARD_THRESHOLD = float(os.getenv("GUARD_THRESHOLD", "0.5"))
+SUPERVISOR_MODE = os.getenv("SUPERVISOR_MODE", "loop")  # "loop" (ask after every step) or "plan" (ask once)
+KB_DIR = os.getenv("KB_DIR", "data/kb")  # knowledge-base Markdown files for the FAQ agent (RAG)
+# Retrieval settings, chosen from evals/results/retrieval.md: plain vector search beat BM25 and hybrid fusion,
+# and a cosine-similarity cutoff makes the agent say "not sure" for questions the knowledge base cannot answer.
+RAG_EMBEDDINGS = os.getenv("RAG_EMBEDDINGS", "fastembed")  # "hash" = offline stand-in used by tests and CI
+RAG_MODE = os.getenv("RAG_MODE", "vector")  # keyword | bm25 | vector | hybrid
+RAG_MIN_SIMILARITY = float(os.getenv("RAG_MIN_SIMILARITY", "0.53"))
+RAG_RERANK = os.getenv("RAG_RERANK", "0") == "1"
 CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH", "data/checkpoints.db")  # conversation state (LangGraph)
 
 

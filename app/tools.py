@@ -6,13 +6,10 @@ order tools take the customer from the graph state (`runtime.state`), NOT from a
 cannot choose, change or invent whose orders it reads.
 """
 
-import re
-from pathlib import Path
-
 from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 
-from app import config, db, orders
+from app import config, db, orders, rag
 
 
 def _customer(runtime: ToolRuntime) -> str:
@@ -39,30 +36,16 @@ def cancel_order(order_id: str, runtime: ToolRuntime) -> dict:
     return orders.cancel(_customer(runtime), order_id)
 
 
-# ---------- FAQ agent tool ----------
-def _load_faq_sections() -> list[tuple[str, str]]:
-    text = Path(config.FAQ_PATH).read_text(encoding="utf-8")
-    parts = re.split(r"^# (.+)$", text, flags=re.MULTILINE)
-    # parts = ['', title1, body1, title2, body2, ...]
-    return [(parts[i].strip(), parts[i + 1].strip()) for i in range(1, len(parts) - 1, 2)]
-
-
-def _tokens(s: str) -> set[str]:
-    return set(re.findall(r"[a-z]{3,}", s.lower()))
-
-
+# ---------- FAQ agent tool (RAG) ----------
 @tool
 def search_faq(query: str) -> list[dict]:
-    """Search the store's policy FAQ (shipping, returns, cancellations, payments,
-    warranty, contact). Returns the best-matching sections."""
-    q = _tokens(query)
-    scored = []
-    for title, body in _load_faq_sections():
-        score = len(q & _tokens(title)) * 3 + len(q & _tokens(body))
-        if score:
-            scored.append((score, {"section": title, "content": body}))
-    scored.sort(key=lambda x: -x[0])
-    return [item for _, item in scored[:2]] or [{"error": "No matching FAQ entry."}]
+    """Search the store's knowledge base (shipping, returns, refunds, orders, payments, warranty,
+    account, contact). Returns the best-matching sections, each with the name to cite."""
+    kb = rag.get_kb(config.KB_DIR, config.RAG_EMBEDDINGS, config.RAG_RERANK)
+    hits = kb.search(query, k=3, mode=config.RAG_MODE, min_similarity=config.RAG_MIN_SIMILARITY)
+    if not hits:
+        return [{"error": "No matching knowledge-base entry."}]
+    return [{"source": h.doc.metadata["id"], "content": h.doc.metadata["text"]} for h in hits]
 
 
 # ---------- Escalation (plain functions, not LLM tools: the graph decides when to escalate) ----------

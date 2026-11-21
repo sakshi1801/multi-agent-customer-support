@@ -49,14 +49,15 @@ def test_llm_visible_schema_has_no_identity_argument():
 
 
 # ---------- FAQ and tickets ----------
-def test_search_faq_returns_relevant_section(temp_db):
-    out = tools.search_faq.invoke({"query": "what is your return policy"})
-    assert out[0]["section"] == "Returns"
-    assert "30 days" in out[0]["content"]
+def test_search_faq_cites_the_section_it_used(temp_db):
+    out = tools.search_faq.invoke({"query": "what is your return policy, how many days"})
+    window = next(o for o in out if o["source"] == "Returns > Return window")  # (ranking quality: evals/)
+    assert "30 days" in window["content"]
+    assert len(out) <= 3 and all({"source", "content"} <= set(o) for o in out)
 
 
-def test_search_faq_no_match(temp_db):
-    assert "error" in tools.search_faq.invoke({"query": "zzzz qqqq"})[0]
+def test_search_faq_says_nothing_matches_for_off_topic_questions(temp_db):
+    assert "error" in tools.search_faq.invoke({"query": "zzzz qqqq xxxx"})[0]
 
 
 def test_ticket_roundtrip_keeps_thread_id(temp_db):

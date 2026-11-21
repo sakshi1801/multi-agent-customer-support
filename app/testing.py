@@ -6,6 +6,7 @@ specialists, so it spends tokens only on the decision it is measuring.
 
 import re
 
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -68,3 +69,29 @@ def keyword_router(messages: list) -> str:
     if re.search(r"return|shipping|warranty|policy|refund|payment", text) and "faq" not in answered:
         return "faq"
     return "FINISH"
+
+
+class HashEmbeddings(Embeddings):
+    """Deterministic offline embeddings: a hashed bag of words (and word pairs). Good enough to test
+    the retrieval pipeline in CI without downloading a model; real quality is measured with the
+    real embedding model in evals/retrieval_eval.py."""
+
+    DIM = 512
+
+    def _vector(self, text: str) -> list[float]:
+        import hashlib
+
+        from app.rag import tokenize
+
+        vec = [0.0] * self.DIM
+        words = tokenize(text)
+        for token in words + [a + "_" + b for a, b in zip(words, words[1:], strict=False)]:
+            vec[int(hashlib.md5(token.encode()).hexdigest(), 16) % self.DIM] += 1.0
+        norm = sum(x * x for x in vec) ** 0.5 or 1.0
+        return [x / norm for x in vec]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)

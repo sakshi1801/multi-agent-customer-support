@@ -23,10 +23,18 @@ def fast_hashing(monkeypatch):
     monkeypatch.setenv("AGENT_API_KEY", "test-agent-key")
 
 
+@pytest.fixture(autouse=True)
+def offline_retrieval(monkeypatch):
+    """Tests never download an embedding model: hashed bag-of-words embeddings and a low cutoff."""
+    monkeypatch.setattr(config, "RAG_EMBEDDINGS", "hash")
+    monkeypatch.setattr(config, "RAG_MIN_SIMILARITY", 0.15)
+    monkeypatch.setattr(config, "RAG_MODE", "vector")
+    monkeypatch.setattr(config, "KB_DIR", str(ROOT / "data" / "kb"))
+
+
 @pytest.fixture()
 def temp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "test.db"))
-    monkeypatch.setattr(config, "FAQ_PATH", str(ROOT / "data" / "faq.md"))
     db.init_db()
     return config.DB_PATH
 
