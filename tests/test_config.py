@@ -16,6 +16,7 @@ PROVIDER_VARS = (
     "LLM_API_KEY",
     "LLM_MODEL",
     "OPENAI_MODEL",
+    "LLM_FALLBACKS",
 )
 
 
@@ -91,3 +92,29 @@ def test_azure_takes_priority_over_other_keys(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
     assert config.get_provider() == "azure"
+
+
+# ---------- fallbacks (Runnables: .with_fallbacks) ----------
+def test_no_fallbacks_returns_the_plain_model(monkeypatch):
+    assert isinstance(config.get_llm(), ChatOpenAI)
+
+
+def test_fallbacks_wrap_the_main_model(monkeypatch):
+    from langchain_core.runnables import RunnableWithFallbacks
+
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv(
+        "LLM_FALLBACKS", "openrouter, openrouter ,groq"
+    )  # duplicates and the main one are dropped
+    assert config.get_fallback_providers() == ["openrouter"]
+    llm = config.get_llm()
+    assert isinstance(llm, RunnableWithFallbacks)
+    assert llm.runnable.openai_api_base == config.GROQ_BASE_URL
+    assert [f.openai_api_base for f in llm.fallbacks] == [config.OPENROUTER_BASE_URL]
+
+
+def test_unknown_fallback_provider_is_rejected(monkeypatch):
+    monkeypatch.setenv("LLM_FALLBACKS", "groq,mystery")
+    with pytest.raises(ValueError, match="mystery"):
+        config.get_fallback_providers()

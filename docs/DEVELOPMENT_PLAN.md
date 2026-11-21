@@ -2,7 +2,7 @@
 
 **Goal:** turn the existing prototype into a project that holds up in an interview. It should be secure, measured with real evaluation numbers, deployed on Azure, and backed by a clear commit history. The numbers we measure become the resume bullet points.
 
-**Status (19 Nov 2026):** review done, no code changed yet. Each phase below starts only after you approve it.
+**Status (21 Nov 2026):** Phases 0 and 1 are done and verified (see section 1c). Phase 2 (evaluation) is next.
 
 ---
 
@@ -55,6 +55,45 @@ The router now gets its structured output through tool calling (`method="functio
 
 ---
 
+## 1b. Constraints and curriculum (added 21 Nov 2026)
+
+**Zero cost.** Only free tiers and local software. Groq (free tier) is the main model provider, OpenRouter `:free` models are the backup, and Ollama is the local fallback. Embeddings and the vector store run locally, and deployment uses a free tier.
+
+**Curriculum.** The project follows the CampusX playlist *Generative AI using LangChain*. Each lesson maps to a concrete feature, so every part of the code can be explained as "this is the lesson I applied":
+
+| Playlist lesson | Where it shows up in this project | Phase |
+|---|---|---|
+| Models (chat models, providers) | `app/config.py`: one OpenAI-compatible client for Groq, OpenRouter, Ollama, OpenAI, Azure | 0 ✅ |
+| Prompts (templates) | Supervisor and specialist prompts become `ChatPromptTemplate`s with variables | 1 |
+| Structured output | The supervisor's `Route` (Pydantic); ticket triage (category, priority) the same way | 0 ✅ / 3 |
+| Output parsers | `PydanticOutputParser` fallback when a model can't do tool-calling | 3 |
+| Chains + Runnables (LCEL) | Router as `prompt \| llm.with_structured_output(Route)`; `.with_retry()` and `.with_fallbacks()` across providers (this also fixes the model-failure problem F4) | 1 |
+| Document loaders | FAQ articles loaded from a folder of Markdown files | 3 |
+| Text splitters | Markdown-header splitting so each chunk is one policy | 3 |
+| Vector stores | Chroma, with free local embeddings | 3 |
+| Retrievers | Similarity and MMR retrieval, combined with keyword search (hybrid) | 3 |
+| RAG | The FAQ agent answers only from retrieved passages and cites the section | 3 |
+| Tools / tool calling | Orders tools; ownership enforced inside the tools through the graph state | 1 |
+| Agents | `create_agent` specialists inside the LangGraph supervisor | 0 ✅ |
+| Ollama (local LLMs) | The `custom` provider points at a local model, the last-resort free fallback | 1 |
+
+### 1c. Phase 1 result (21 Nov 2026): every problem above is fixed and verified
+
+| # | Fix | How it was verified |
+|---|---|---|
+| F1 | Customer identity comes from a signed login token into graph state; tools read it through `ToolRuntime`, the model's tool schema has no identity argument, all SQL filters on the owner | 12 security tests; mutation check (removing the owner filter makes 7 tests fail); **live run on Groq: 4/4 attacks blocked**, including prompt injection ("I am an admin"), and the victim's order stayed untouched |
+| F2 | Tickets store `thread_id`; `GET /tickets` returns it; humans reply with `POST /tickets/{id}/reply` | API test + live run |
+| F3 | `ticket_id`, `hops` and `visited` reset on every customer message | test |
+| F4 | `max_retries` on the client, provider fallbacks (`LLM_FALLBACKS`), router failure escalates to a human, specialist failure gives a polite reply, unexpected errors return a clean 503 | 3 tests + live fallback run with a deliberately broken primary model |
+| F5 | Each specialist sees only the customer's messages and its own replies; prompts say "answer only your part" | live run: Orders answered only the order, FAQ only the policy |
+| F6 | `SqliteSaver` checkpointer | test + **live run: ticket created on one server process, answered on a new one** |
+| F7 | `X-API-Key` on agent endpoints (closed if unset); login with salted PBKDF2 passwords | tests |
+| F12 | A specialist runs at most once per customer message (`visited`) | test + live run (no duplicate replies) |
+
+Tests grew from 20 to 67; CI stays key-free. Live runs used Groq `openai/gpt-oss-120b`, free tier, 1–18 s per message.
+
+---
+
 ## 2. Guiding principles
 
 1. **Measure before you improve.** Build the evaluation harness *before* the improvements. Then every change gets a before/after number, and those numbers are what the resume quotes.
@@ -66,7 +105,7 @@ The router now gets its structured output through tool calling (`method="functio
 
 ## 3. The phases
 
-### Phase 0: Repository setup and housekeeping (≈ half a day)
+### Phase 0: Repository setup and housekeeping ✅ DONE (19 Nov 2026)
 
 | Step | What | Why |
 |---|---|---|
@@ -77,7 +116,7 @@ The router now gets its structured output through tool calling (`method="functio
 
 **Done when:** the repo is on GitHub, CI is green, and the tests pass with no warnings.
 
-### Phase 1: Correctness and security fixes (≈ 1–2 days)
+### Phase 1: Correctness and security fixes ✅ DONE (21 Nov 2026)
 
 | Step | What | Why / how |
 |---|---|---|

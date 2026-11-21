@@ -12,6 +12,10 @@ Supported providers (all speak the OpenAI chat API, so one client covers them):
 Set LLM_PROVIDER to pick one explicitly (handy when several keys are in .env).
 Otherwise the first configured provider in the order above is used.
 
+LLM_FALLBACKS (comma-separated provider names, e.g. "openrouter,custom") lists providers to try when
+the main one fails, for example when a free tier is rate-limited. This is the LangChain Runnables
+`.with_fallbacks()` pattern: the same call is retried on the next model in the list.
+
 LangSmith tracing turns on automatically when LANGSMITH_TRACING=true and
 LANGSMITH_API_KEY are in your .env (no code changes needed).
 """
@@ -25,6 +29,7 @@ load_dotenv()
 
 DB_PATH = os.getenv("DB_PATH", "data/support.db")
 FAQ_PATH = os.getenv("FAQ_PATH", "data/faq.md")
+CHECKPOINT_PATH = os.getenv("CHECKPOINT_PATH", "data/checkpoints.db")  # conversation state (LangGraph)
 
 
 @dataclass(frozen=True)
@@ -68,10 +73,28 @@ def get_provider() -> str:
     return "openai"
 
 
-def get_llm():
-    """Return a chat model. Imported lazily so tests never need an API key."""
-    provider = get_provider()
+def get_fallback_providers() -> list[str]:
+    """Providers named in LLM_FALLBACKS, validated and without duplicates of the main provider."""
+    main = get_provider()
+    names = [n.strip().lower() for n in os.getenv("LLM_FALLBACKS", "").split(",") if n.strip()]
+    unknown = [n for n in names if n not in PROVIDERS]
+    if unknown:
+        raise ValueError(f"LLM_FALLBACKS has unknown provider(s): {', '.join(unknown)}")
+    return [n for i, n in enumerate(names) if n != main and n not in names[:i]]
 
+
+def get_llm():
+    """Return the chat model: the main provider, wrapped with the configured fallbacks.
+
+    Imported lazily so tests never need an API key.
+    """
+    primary = build_llm(get_provider())
+    fallbacks = [build_llm(name) for name in get_fallback_providers()]
+    return primary.with_fallbacks(fallbacks) if fallbacks else primary
+
+
+def build_llm(provider: str):
+    """Construct the chat model for one named provider."""
     if provider == "azure":
         from langchain_openai import AzureChatOpenAI
 
