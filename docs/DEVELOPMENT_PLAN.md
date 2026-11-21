@@ -4,6 +4,10 @@
 
 **Status (21 Nov 2026):** Phases 0 to 4 are built and verified; Phase 5 (documentation) is in progress. Results are in [EVALUATION.md](EVALUATION.md), the interview preparation in [INTERVIEW_NOTES.md](INTERVIEW_NOTES.md), deployment in [DEPLOY.md](DEPLOY.md). Section 7 lists what changed from the original plan and why.
 
+> **How to read this document.** Sections 1 to 6 are the plan as it was written on 19 November 2026, before any
+> code changed, kept so the reasoning stays visible. Section 1c and section 7 record what actually happened. The final
+> resume text is in [RESUME.md](RESUME.md) (section 4 below is the original template with `[X]` placeholders).
+
 ---
 
 ## 1. Where the project stands today
@@ -189,7 +193,7 @@ The order is flexible. Once the baseline shows the weakest metric, we fix that f
 
 ---
 
-## 4. Resume: current entry vs. target
+## 4. Resume: current entry vs. target (original template; final text in [RESUME.md](RESUME.md))
 
 **Current entry**
 > Building a supervisor-agent architecture routing queries to specialist agents (orders, FAQ, escalation) with tool calling and human-in-the-loop handoff; LangSmith tracing to evaluate routing accuracy.
