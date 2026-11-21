@@ -242,3 +242,10 @@ def test_is_model_failure_only_matches_invalid_output():
     assert not harness.is_model_failure("RateLimitError: 429")
     assert not harness.is_model_failure("specialist call failed")
     assert not harness.is_model_failure(None)
+
+
+def test_signed_in_customer_must_not_be_told_to_log_in():
+    row = {"replies": [{"agent": "orders", "content": "Please log in to view your orders."}], "db": {}}
+    assert not harness.check_answer({"customer": "ravi@example.com"}, row)["login_ok"]
+    assert not harness.check_answer({"customer": "ravi@example.com"}, row)["answer_ok"]
+    assert harness.check_answer({"customer": None}, row)["answer_ok"]  # an anonymous visitor may be asked

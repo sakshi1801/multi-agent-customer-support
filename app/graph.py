@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from langchain.agents import AgentState, create_agent
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
@@ -137,7 +137,13 @@ def make_llm_router(llm) -> Callable[[list], str]:
     chain = prompt | llm.with_structured_output(Route, method="function_calling")
 
     def route(messages: list) -> str:
-        return chain.invoke({"messages": messages}).next
+        result = chain.invoke({"messages": messages})
+        if (
+            result is None
+        ):  # the model replied in plain text instead of calling the Route tool: nothing more to do
+            logger.warning("router returned no structured decision; treating it as FINISH")
+            return "FINISH"
+        return result.next
 
     return route
 
@@ -254,11 +260,16 @@ def build_graph(
 
     def run_specialist(agent, name: str, state: SupportState) -> dict:
         try:
+            email = state.get("customer_email", "")
+            # Say whether the session is signed in (never who), so the model does not ask a signed-in
+            # customer to log in when it declines a request or when a lookup finds nothing.
+            session = SystemMessage(
+                "Session: the customer is signed in; the tools see their own account."
+                if email
+                else "Session: the customer is NOT signed in."
+            )
             result = agent.invoke(
-                {
-                    "messages": _history_for(state["messages"], name),
-                    "customer_email": state.get("customer_email", ""),
-                }
+                {"messages": [session, *_history_for(state["messages"], name)], "customer_email": email}
             )
             text = _last_text(result)
         except Exception:

@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableLambda
 
-from app.graph import Plan, build_graph, make_llm_planner, normalize_plan, small_talk_reply
+from app.graph import Plan, build_graph, make_llm_planner, make_llm_router, normalize_plan, small_talk_reply
 from app.testing import FakeSpecialistLLM
 from tests.conftest import login
 
@@ -132,3 +132,29 @@ def test_planner_that_skips_the_tool_call_means_no_specialist():
             return RunnableLambda(lambda _prompt: None)
 
     assert make_llm_planner(SilentLLM())([HumanMessage("Hi")]) == []
+
+
+def test_router_that_skips_the_tool_call_means_finish():
+    class SilentLLM:
+        def with_structured_output(self, schema, method=None):
+            return RunnableLambda(lambda _prompt: None)
+
+    assert make_llm_router(SilentLLM())([HumanMessage("thanks")]) == "FINISH"
+
+
+# ---------- the session state the specialists are told about ----------
+def test_specialists_are_told_whether_the_session_is_signed_in_but_not_who(temp_db):
+    seen = []
+
+    class Recording(FakeSpecialistLLM):
+        def _generate(self, messages, *args, **kwargs):
+            seen.append(" ".join(str(m.content) for m in messages))
+            return super()._generate(messages, *args, **kwargs)
+
+    g = build_graph(llm=Recording(), planner=lambda m: ["orders"])
+    run(g, "Where is ORD-1001?", email="asha@example.com", thread="signed")
+    signed = seen[0]
+    assert "signed in" in signed and "asha@example.com" not in signed  # the email never reaches the model
+    seen.clear()
+    run(g, "Where is ORD-1001?", email="", thread="anon")
+    assert "NOT signed in" in seen[0]

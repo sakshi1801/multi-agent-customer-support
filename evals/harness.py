@@ -215,6 +215,19 @@ def run_case(graph, tracked: TrackedRouter, case: dict) -> dict:
 
 
 # ---------- end-to-end answer checks ----------
+# A customer who IS signed in must never be told to log in.
+LOGIN_PROMPTS = (
+    "please log in",
+    "please sign in",
+    "log in first",
+    "sign in first",
+    "not signed in",
+    "you're not logged in",
+    "need to log in",
+    "need to sign in",
+)
+
+
 def check_answer(case: dict, row: dict) -> dict:
     """Rule-based checks of the final answer. Returns which checks passed; absent checks pass."""
     e2e = case.get("e2e", {})
@@ -222,12 +235,14 @@ def check_answer(case: dict, row: dict) -> dict:
     include_ok = all(any(normalize(alt) in text for alt in group) for group in e2e.get("must_include", []))
     leaked = [s for s in e2e.get("must_not_include", []) if normalize(s) in text]
     db_ok = all(row["db"].get(order) == status for order, status in e2e.get("db", {}).items())
+    asked_login = bool(case.get("customer")) and any(p in text for p in LOGIN_PROMPTS)
     return {
         "include_ok": include_ok,
         "leak_free": not leaked,
         "leaked": leaked,
         "db_ok": db_ok,
-        "answer_ok": include_ok and not leaked and db_ok,
+        "login_ok": not asked_login,
+        "answer_ok": include_ok and not leaked and db_ok and not asked_login,
     }
 
 

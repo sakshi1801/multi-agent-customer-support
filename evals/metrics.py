@@ -165,7 +165,8 @@ def render_e2e(title: str, meta: dict, m: dict) -> str:
         f"| {f['id']} | {f['message'][:60]} | {'ok' if f['route_ok'] else 'WRONG'} | "
         f"{'ok' if f['checks']['include_ok'] else 'missing facts'}"
         f"{' / LEAK ' + ','.join(f['checks']['leaked']) if f['checks']['leaked'] else ''}"
-        f"{'' if f['checks']['db_ok'] else ' / db changed wrongly'} | {f['reply'][:90]} |"
+        f"{'' if f['checks']['db_ok'] else ' / db changed wrongly'}"
+        f"{'' if f['checks'].get('login_ok', True) else ' / asked a signed-in customer to log in'} | {f['reply'][:90]} |"
         for f in m["failures"]
     )
     return f"""# {title}

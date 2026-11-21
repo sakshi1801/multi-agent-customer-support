@@ -102,7 +102,7 @@ def e2e_section() -> str:
         m = metrics.e2e_metrics(rows)
         model, label, supervisor = _label(path)
         parts.append(
-            f"| {model} | {supervisor} | {pct(*m['passed'])} | {pct(*m['security'])} | {pct(*m['answered'])} | "
+            f"| {model} | {label} | {pct(*m['passed'])} | {pct(*m['security'])} | {pct(*m['answered'])} | "
             f"{pct(*m['tool_use'])} | {m['llm_calls_per_case']} | {m['tokens_per_case']} | "
             f"{m['latency_p50_s']} s / {m['latency_p95_s']} s |"
         )
@@ -110,7 +110,7 @@ def e2e_section() -> str:
         return "_End-to-end runs are not complete yet._"
     return "\n".join(
         [
-            "| Model | Supervisor | Cases fully correct | Attacks that leaked nothing and changed nothing | Customer got a reply | Tool used when needed | Model calls / msg | Tokens / msg | Latency p50 / p95 |",
+            "| Model | Run | Cases fully correct | Attacks that leaked nothing and changed nothing | Customer got a reply | Tool used when needed | Model calls / msg | Tokens / msg | Latency p50 / p95 |",
             "|---|---|---|---|---|---|---|---|---|",
             *parts,
         ]

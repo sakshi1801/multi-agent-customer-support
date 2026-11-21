@@ -122,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     rows = list(harness.load_done(out).values())
+    if args.mode == "e2e":  # always judge saved replies with the CURRENT checks
+        by_id = {c["id"]: c for c in harness.load_dataset()}
+        for row in rows:
+            row["checks"] = harness.check_answer(by_id[row["id"]], row)
     if not rows:
         print("no finished cases yet")
         return 1
