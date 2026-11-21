@@ -13,7 +13,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app import config, db  # noqa: E402
+from app import auth, config, db  # noqa: E402
 from app.graph import build_graph  # noqa: E402
 from app.main import create_app  # noqa: E402
 
@@ -21,8 +21,9 @@ from app.main import create_app  # noqa: E402
 class FakeSpecialistLLM(BaseChatModel):
     """Deterministic stand-in for the specialists' LLM.
 
-    It really issues tool calls (so tools, ToolNode and the ReAct loop are exercised),
-    then summarises the tool result. Which tool it calls depends on the agent's system prompt.
+    It really issues tool calls (so tools, ToolNode, injected runtime state and the ReAct loop are
+    exercised), then summarises the tool result. Which tool it calls depends on the agent's system
+    prompt. Like a real model, it only knows the arguments the tool schema exposes: no email.
     """
 
     @property
@@ -43,13 +44,12 @@ class FakeSpecialistLLM(BaseChatModel):
         text = next(m.content for m in reversed(messages) if isinstance(m, HumanMessage))
         if "Orders specialist" in system:
             order_id = re.search(r"ORD-\d+", text, re.I)
-            email = re.search(r"Customer email: (\S+)", system)
             if "cancel" in text.lower() and order_id:
                 call = ("cancel_order", {"order_id": order_id.group(0)})
             elif order_id:
                 call = ("get_order_status", {"order_id": order_id.group(0)})
             else:
-                call = ("list_customer_orders", {"email": email.group(1) if email else ""})
+                call = ("list_customer_orders", {})
         else:  # FAQ specialist
             call = ("search_faq", {"query": text})
 
@@ -77,6 +77,14 @@ def keyword_router(messages: list) -> str:
     return "FINISH"
 
 
+@pytest.fixture(autouse=True)
+def fast_hashing(monkeypatch):
+    """Password hashing is deliberately slow; make it cheap in tests."""
+    monkeypatch.setattr(auth, "PBKDF2_ITERATIONS", 1_000)
+    monkeypatch.setenv("TOKEN_SECRET", "test-secret")
+    monkeypatch.setenv("AGENT_API_KEY", "test-agent-key")
+
+
 @pytest.fixture()
 def temp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "test.db"))
@@ -94,3 +102,13 @@ def graph(temp_db):
 def client(graph):
     with TestClient(create_app(graph=graph)) as c:
         yield c
+
+
+AGENT_HEADERS = {"X-API-Key": "test-agent-key"}
+
+
+def login(client, email: str) -> dict:
+    """Headers for a logged-in demo customer."""
+    r = client.post("/auth/login", json={"email": email, "password": db.DEMO_PASSWORD})
+    assert r.status_code == 200, r.text
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
