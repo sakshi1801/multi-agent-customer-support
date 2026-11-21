@@ -24,6 +24,32 @@ DATASET = Path(__file__).with_name("dataset.jsonl")
 RESULTS = Path(__file__).with_name("results")
 
 
+# Failures that are the MODEL's fault, not the infrastructure's: it was asked for a routing decision and
+# did not produce a valid one (no tool call, or a tool name that does not exist). These are results, so they
+# count against the model; they are not retried like a rate-limit error would be.
+MODEL_FAILURE_SIGNS = (
+    "tool choice is required",
+    "unknown tool type",
+    "outputparserexception",
+    "did not call",
+)
+
+
+def is_model_failure(error: str | None) -> bool:
+    return bool(error) and any(sign in error.lower() for sign in MODEL_FAILURE_SIGNS)
+
+
+def as_model_failure(row: dict) -> dict:
+    """Turn an error row caused by invalid model output into a scored, failed routing decision."""
+    return {
+        **row,
+        "model_failure": True,
+        "route_ok": False,
+        "model_failure_detail": row["error"][:160],
+        "error": None,
+    }
+
+
 class QuotaExhausted(Exception):
     """The provider says the daily quota is used up. Stop and resume after the reset."""
 
@@ -138,6 +164,8 @@ def run_case(graph, tracked: TrackedRouter, case: dict) -> dict:
                 "messages": initial_messages(case),
                 "hops": 0,
                 "visited": [],
+                "plan": [],
+                "planned": False,
                 "ticket_id": None,
                 "customer_email": case.get("customer") or "",
             },
@@ -162,11 +190,12 @@ def run_case(graph, tracked: TrackedRouter, case: dict) -> dict:
     if error and "per day" in error.lower():  # e.g. "Rate limit reached ... on tokens per day (TPD)"
         raise QuotaExhausted(error[:300])
 
+    model_failed = is_model_failure(error)
     with db.connect() as conn:  # (a bare sqlite3.connect() context manager would never close it)
         statuses = {r["order_id"]: r["status"] for r in conn.execute("SELECT order_id, status FROM orders")}
     expected = sorted(case["expected_agents"])
     predicted = sorted(set(values.get("visited", [])))
-    return {
+    row = {
         "id": case["id"],
         "category": case["category"],
         "message": case["message"],
@@ -182,6 +211,7 @@ def run_case(graph, tracked: TrackedRouter, case: dict) -> dict:
         "db": statuses,
         "error": error,
     }
+    return as_model_failure(row) if model_failed else row
 
 
 # ---------- end-to-end answer checks ----------
@@ -210,6 +240,7 @@ def load_done(path: Path) -> dict[str, dict]:
             if line.strip():
                 row = json.loads(line)
                 rows[row["id"]] = row
+    rows = {k: as_model_failure(v) if is_model_failure(v.get("error")) else v for k, v in rows.items()}
     return {k: v for k, v in rows.items() if not v.get("error")}
 
 

@@ -204,3 +204,41 @@ def test_history_is_replayed_into_the_conversation(cases):
     follow_up = next(c for c in cases if c["category"] == "multi_turn")
     msgs = harness.initial_messages(follow_up)
     assert msgs[-1].content == follow_up["message"] and len(msgs) == len(follow_up["history"]) + 1
+
+
+# ---------- model failures are results, outages are retried ----------
+def test_invalid_model_output_is_scored_as_a_failure_not_retried(tmp_path):
+    bad = {
+        "id": "a",
+        "category": "orders",
+        "message": "m",
+        "expected": ["orders"],
+        "predicted": ["escalation"],
+        "route_ok": False,
+        "llm_calls": 1,
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "latency_s": 1.0,
+        "replies": [],
+        "tools": [],
+        "db": {},
+        "error": "OpenAIInvalidRequestError: Error code: 400 - Tool choice is required, but model did not call a tool",
+    }
+    outage = {**bad, "id": "b", "error": "RateLimitError: 429 Too Many Requests"}
+    parse = {**bad, "id": "c", "error": "OutputParserException: Unknown tool type: 'functions.Route'"}
+    path = tmp_path / "r.jsonl"
+    for row in (bad, outage, parse):
+        harness.append_row(path, row)
+    done = harness.load_done(path)
+    assert set(done) == {"a", "c"}  # the outage will be retried; the model failures are final
+    assert done["a"]["model_failure"] and done["a"]["route_ok"] is False and done["a"]["error"] is None
+    m = metrics.routing_metrics(list(done.values()))
+    assert m["model_failures"] == (2, 2) and m["accuracy"] == (0, 2)
+    assert m["failures"][0]["predicted"] == ["(invalid model output)"]
+
+
+def test_is_model_failure_only_matches_invalid_output():
+    assert harness.is_model_failure("OutputParserException: bad")
+    assert not harness.is_model_failure("RateLimitError: 429")
+    assert not harness.is_model_failure("specialist call failed")
+    assert not harness.is_model_failure(None)

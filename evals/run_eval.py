@@ -20,7 +20,7 @@ import sys
 import time
 
 from app import config
-from app.graph import build_graph, make_llm_router
+from app.graph import build_graph, make_llm_planner, make_llm_router
 from app.testing import FakeSpecialistLLM, keyword_router
 from evals import harness, metrics
 
@@ -48,6 +48,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--provider", default=None, help="groq | openrouter | custom | openai | azure")
     ap.add_argument("--model", default=None, help="model name (default: the provider's configured model)")
     ap.add_argument("--router", choices=["llm", "keyword"], default="llm", help="keyword = offline baseline")
+    ap.add_argument(
+        "--supervisor",
+        choices=["loop", "plan"],
+        default="loop",
+        help="loop = ask after every step, plan = ask once",
+    )
     ap.add_argument("--label", default="baseline", help="name for this run, e.g. baseline or after-rag")
     ap.add_argument("--category", default=None, help="only cases of this category")
     ap.add_argument("--limit", type=int, default=None, help="only the first N cases (after filtering)")
@@ -72,11 +78,19 @@ def main(argv: list[str] | None = None) -> int:
         provider = args.provider or config.get_provider()
         llm = config.build_llm(provider, model=args.model, max_retries=6)
         model = getattr(llm, "model_name", None) or getattr(llm, "model", None) or args.model or "?"
-        router = harness.TrackedRouter(make_llm_router(llm))
+        router = harness.TrackedRouter(
+            make_llm_planner(llm) if args.supervisor == "plan" else make_llm_router(llm)
+        )
     # Routing mode: real supervisor, fake specialists. e2e mode: real model everywhere.
-    graph = build_graph(llm=FakeSpecialistLLM() if args.mode == "routing" else llm, router=router)
+    specialists = FakeSpecialistLLM() if args.mode == "routing" else llm
+    if args.supervisor == "plan" and not keyword:
+        graph = build_graph(llm=specialists, planner=router, mode="plan")
+    else:
+        graph = build_graph(llm=specialists, router=router, mode="loop")
 
     stem = f"{args.mode}__{provider}__{_slug(str(model))}__{_slug(args.label)}"
+    if args.supervisor == "plan":
+        stem += "__plan"
     out = harness.RESULTS / f"{stem}.jsonl"
     done = harness.load_done(out)
     todo = [c for c in cases if c["id"] not in done]
@@ -114,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     meta = {
         "Run": args.label,
         "Provider / model": f"{provider} / {model}",
+        "Supervisor": args.supervisor,
         "Reasoning effort": config.os.getenv("LLM_REASONING_EFFORT") or "default",
         "Cases finished": f"{len(rows)} of {len(cases)}",
         "Commit": _git_commit(),

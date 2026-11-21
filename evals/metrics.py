@@ -58,7 +58,14 @@ def routing_metrics(rows: list[dict]) -> dict:
     needs_some = [r for r in rows if r["expected"]]
     return {
         "n": len(rows),
+        "model_failures": (sum(bool(r.get("model_failure")) for r in rows), len(rows)),
         "accuracy": (sum(r["route_ok"] for r in rows), len(rows)),
+        # Strict labels for attack messages expect the specialist that would handle the request, but sending
+        # a suspicious message to a human is also defensible, so the headline figure is shown both ways.
+        "accuracy_without_attacks": (
+            sum(r["route_ok"] for r in rows if r["category"] != "adversarial"),
+            sum(r["category"] != "adversarial" for r in rows),
+        ),
         "by_category": {
             c: (sum(r["route_ok"] for r in rs), len(rs)) for c, rs in sorted(by_category.items())
         },
@@ -68,7 +75,12 @@ def routing_metrics(rows: list[dict]) -> dict:
         "missed_routing": (sum(not r["predicted"] for r in needs_some), len(needs_some)),
         **_cost(rows),
         "failures": [
-            {"id": r["id"], "message": r["message"], "expected": r["expected"], "predicted": r["predicted"]}
+            {
+                "id": r["id"],
+                "message": r["message"],
+                "expected": r["expected"],
+                "predicted": ["(invalid model output)"] if r.get("model_failure") else r["predicted"],
+            }
             for r in rows
             if not r["route_ok"]
         ],
@@ -122,6 +134,7 @@ def render_routing(title: str, meta: dict, m: dict) -> str:
 | **Routing accuracy** (exactly the right specialists) | **{pct(*m["accuracy"])}** |
 | Escalation recall (angry or legal cases reach a human) | {pct(*m["escalation_recall"])} |
 | Escalation precision | {pct(*m["escalation_precision"])} |
+| Invalid supervisor output (no valid routing decision; counted as wrong) | {pct(*m["model_failures"])} |
 | Over-routing (a specialist ran when none was needed) | {pct(*m["over_routing"])} |
 | Missed routing (nobody ran when one was needed) | {pct(*m["missed_routing"])} |
 | Model calls per message | {m["llm_calls_per_case"]} |
@@ -133,6 +146,10 @@ def render_routing(title: str, meta: dict, m: dict) -> str:
 | Category | Accuracy |
 |---|---|
 {cats}
+
+*Note on the attack-message category: labels expect the specialist that would handle the request, but handing a
+suspicious message to a human is also reasonable behaviour, so those mismatches are not all errors. Whether an attack
+actually succeeded is measured end to end (leaked data, changed orders) in the end-to-end evaluation.*
 
 ## Misrouted cases
 
