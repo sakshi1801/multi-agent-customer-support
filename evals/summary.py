@@ -117,6 +117,65 @@ def e2e_section() -> str:
     )
 
 
+def _metrics_for(pattern: str):
+    """Routing metrics of the first complete (132-case) results file matching the pattern, or None."""
+    for path in _find(pattern):
+        rows = _rows(path)
+        if len(rows) >= 132:
+            return metrics.routing_metrics(rows)
+    return None
+
+
+def _e2e_for(pattern: str):
+    for path in _find(pattern):
+        rows = _rows(path)
+        if len(rows) >= 32:
+            cases = {c["id"]: c for c in harness.load_dataset()}
+            for r in rows:
+                r["checks"] = harness.check_answer(cases[r["id"]], r)
+            return metrics.e2e_metrics(rows)
+    return None
+
+
+def readme_block() -> str:
+    """The headline table for the README, built from the same result files."""
+    plan = _metrics_for("routing__groq__openai-gpt-oss-120b__planner__plan.jsonl")
+    loop = _metrics_for("routing__groq__openai-gpt-oss-120b__baseline.jsonl")
+    rules = _metrics_for("routing__none__keyword-rules__keyword-rules.jsonl")
+    local_plan = _metrics_for("routing__custom__*__planner__plan.jsonl")
+    local_loop = _metrics_for("routing__custom__*__baseline.jsonl")
+    e2e = _e2e_for("e2e__groq__openai-gpt-oss-120b__final-v2__plan.jsonl")
+    local_e2e = _e2e_for("e2e__custom__*__final__plan.jsonl")
+    lines = [
+        "All figures are on free tiers or locally, on hand-labelled cases, with 95% confidence intervals in the full report.",
+        "",
+    ]
+    if plan and loop and rules:
+        lines += [
+            "| Measure | Result |",
+            "|---|---|",
+            f"| **Routing accuracy**, {plan['n']} labelled messages (gpt-oss-120b, planner supervisor) | **{pct(*plan['accuracy'])}**, against {pct(*loop['accuracy'])} for the original loop supervisor and {pct(*rules['accuracy'])} for keyword rules |",
+            f"| **Escalation recall** (angry or legal messages reach a human) | {pct(*plan['escalation_recall'])}; precision {pct(*plan['escalation_precision'])} |",
+            f"| **Cost of a decision**, planner against loop | model calls per message {loop['llm_calls_per_case']} -> {plan['llm_calls_per_case']} ({100 * (plan['llm_calls_per_case'] - loop['llm_calls_per_case']) / loop['llm_calls_per_case']:+.0f}%), tokens {loop['tokens_per_case']} -> {plan['tokens_per_case']} ({100 * (plan['tokens_per_case'] - loop['tokens_per_case']) / loop['tokens_per_case']:+.0f}%), median latency {loop['latency_p50_s']} s -> {plan['latency_p50_s']} s |",
+        ]
+    if e2e:
+        lines.append(
+            f"| **End to end** ({e2e['n']} cases with the real specialists: facts, no leaks, database state) | {pct(*e2e['passed'])} fully correct; **attacks that leaked nothing and changed nothing: {pct(*e2e['security'])}** |"
+        )
+    if local_plan and local_loop:
+        local = f"| **Fully local, offline** (4B model on a laptop GPU via Ollama) | routing {pct(*local_plan['accuracy'])} with the planner ({pct(*local_loop['accuracy'])} with the loop)"
+        if local_e2e:
+            local += f"; end to end {pct(*local_e2e['passed'])}; attacks that leaked nothing: {pct(*local_e2e['security'])}"
+        lines.append(local + " |")
+    lines.append(
+        "| **FAQ retrieval** (top-3 contains the right section, 41 questions) | vector search 92.7% against 53.7% for the prototype's keyword search; BM25, hybrid fusion and a reranker were measured and did not beat vector search |"
+    )
+    lines.append(
+        "| **Tests** | 120+ deterministic tests with a fake model (no API key), run in CI together with a Docker image build and container smoke test |"
+    )
+    return chr(10).join(lines)
+
+
 def _body(name: str) -> str:
     """A results report without its title line."""
     path = harness.RESULTS / name
@@ -185,7 +244,14 @@ Runs pace themselves under the free tier's token limits and save every finished 
 run (or a daily quota stop) resumes where it left off.
 """
     DOCS.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {DOCS}")
+    readme = harness.ROOT / "README.md"
+    body = readme.read_text(encoding="utf-8")
+    start, end = "<!-- RESULTS-START -->", "<!-- RESULTS-END -->"
+    if start in body and end in body:
+        head, rest = body.split(start, 1)
+        tail = rest.split(end, 1)[1]
+        readme.write_text(f"{head}{start}\n{readme_block()}\n{end}{tail}", encoding="utf-8", newline="\n")
+    print(f"wrote {DOCS} and the README results block")
     return 0
 
 

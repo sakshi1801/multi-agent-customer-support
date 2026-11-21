@@ -26,7 +26,9 @@ as it was, not relabelled to improve the score.
 | openai/gpt-oss-120b | plan | 92.4% (122/132, 95% CI 87-96%) | 94.0% (109/116, 95% CI 88-97%) | 100.0% (25/25, 95% CI 87-100%) | 89.3% (25/28, 95% CI 73-96%) | 1.5% (2/132, 95% CI 0-5%) | 1.0 | 476 | 0.75 s / 1.46 s |
 | openai/gpt-oss-20b | loop | 85.6% (113/132, 95% CI 79-91%) | 87.9% (102/116, 95% CI 81-93%) | 100.0% (25/25, 95% CI 87-100%) | 71.4% (25/35, 95% CI 55-84%) | 4.5% (6/132, 95% CI 2-10%) | 1.83 | 1010 | 1.29 s / 5.61 s |
 | qwen/qwen3.8-27b | loop | 90.2% (119/132, 95% CI 84-94%) | 90.5% (105/116, 95% CI 84-95%) | 100.0% (25/25, 95% CI 87-100%) | 92.6% (25/27, 95% CI 77-98%) | 0.0% (0/132, 95% CI 0-3%) | 1.82 | 1139 | 0.54 s / 1.79 s |
-| qwen/qwen3.8-27b (67/132 done) | plan | 100.0% (67/67, 95% CI 95-100%) | 100.0% (67/67, 95% CI 95-100%) | 100.0% (5/5, 95% CI 57-100%) | 100.0% (5/5, 95% CI 57-100%) | 0.0% (0/67, 95% CI 0-5%) | 1.0 | 597 | 0.26 s / 1.08 s |
+| qwen/qwen3.8-27b (79/132 done) | plan | 100.0% (79/79, 95% CI 95-100%) | 100.0% (79/79, 95% CI 95-100%) | 100.0% (17/17, 95% CI 82-100%) | 100.0% (17/17, 95% CI 82-100%) | 0.0% (0/79, 95% CI 0-5%) | 1.0 | 596 | 0.28 s / 4.39 s |
+| qwen3/4b-instruct-2507-q4-k-m | loop | 53.0% (70/132, 95% CI 45-61%) | 50.0% (58/116, 95% CI 41-59%) | 36.0% (9/25, 95% CI 20-55%) | 81.8% (9/11, 95% CI 52-95%) | 0.0% (0/132, 95% CI 0-3%) | 1.47 | 668 | 1.75 s / 6.23 s |
+| qwen3/4b-instruct-2507-q4-k-m | plan | 84.8% (112/132, 95% CI 78-90%) | 87.1% (101/116, 95% CI 80-92%) | 84.0% (21/25, 95% CI 65-94%) | 100.0% (21/21, 95% CI 85-100%) | 0.0% (0/132, 95% CI 0-3%) | 1.0 | 436 | 1.27 s / 1.64 s |
 
 *Loop* = the original design: the model is asked "who next?" after every specialist.
 *Plan* = the model is asked once for every specialist the message needs. *Rules* = a keyword matcher, the
@@ -41,7 +43,12 @@ offline floor any model has to beat. "Invalid output" means the model produced n
 
 ## 2. End to end
 
-_End-to-end runs are not complete yet._
+| Model | Run | Cases fully correct | Attacks that leaked nothing and changed nothing | Customer got a reply | Tool used when needed | Model calls / msg | Tokens / msg | Latency p50 / p95 |
+|---|---|---|---|---|---|---|---|---|
+| qwen3/4b-instruct-2507-q4-k-m | final | 68.8% (22/32, 95% CI 51-82%) | 100.0% (9/9, 95% CI 70-100%) | 100.0% (32/32, 95% CI 89-100%) | 60.0% (18/30, 95% CI 42-75%) | 2.47 | 1130 | 9.16 s / 15.53 s |
+| openai/gpt-oss-120b | final-v2 | 100.0% (24/24, 95% CI 86-100%) | 100.0% (1/1, 95% CI 21-100%) | 100.0% (24/24, 95% CI 86-100%) | 95.5% (21/22, 95% CI 78-99%) | 3.21 | 1560 | 2.17 s / 5.4 s |
+| openai/gpt-oss-120b | final | 93.8% (30/32, 95% CI 80-98%) | 100.0% (9/9, 95% CI 70-100%) | 100.0% (32/32, 95% CI 89-100%) | 93.3% (28/30, 95% CI 79-98%) | 3.12 | 1523 | 2.01 s / 5.15 s |
+| openai/gpt-oss-120b | security | 100.0% (9/9, 95% CI 70-100%) | 100.0% (9/9, 95% CI 70-100%) | 100.0% (9/9, 95% CI 70-100%) | 88.9% (8/9, 95% CI 56-98%) | 2.89 | 1523 | 2.05 s / 2.73 s |
 
 ## 3. Retrieval for the FAQ agent
 
