@@ -1,45 +1,42 @@
-"""Tools the specialist agents can call. Plain functions + @tool decorator."""
+"""Tools the specialist agents can call.
+
+Playlist lesson "Tools / Tool Calling": a tool is a function plus a schema the LLM sees. Here the
+order tools take the customer from the graph state (`runtime.state`), NOT from an argument. The
+`runtime` parameter is injected by LangChain and hidden from the model's schema, so the model
+cannot choose, change or invent whose orders it reads.
+"""
 
 import re
 from pathlib import Path
 
+from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 
-from app import config, db
+from app import config, db, orders
+
+
+def _customer(runtime: ToolRuntime) -> str:
+    return (runtime.state.get("customer_email") or "").strip().lower()
 
 
 # ---------- Orders agent tools ----------
 @tool
-def get_order_status(order_id: str) -> dict:
-    """Look up one order by its ID (e.g. ORD-1001). Returns item, status, total and ETA."""
-    with db.connect() as conn:
-        row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id.strip().upper(),)).fetchone()
-    return dict(row) if row else {"error": f"No order found with ID {order_id}"}
+def get_order_status(order_id: str, runtime: ToolRuntime) -> dict:
+    """Look up one of the signed-in customer's orders by ID (e.g. ORD-1001).
+    Returns item, status, total and ETA."""
+    return orders.lookup(_customer(runtime), order_id)
 
 
 @tool
-def list_customer_orders(email: str) -> list[dict]:
-    """List all orders placed by a customer email address."""
-    with db.connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM orders WHERE customer_email = ? ORDER BY order_id",
-            (email.strip().lower(),),
-        ).fetchall()
-    return [dict(r) for r in rows] or [{"error": f"No orders found for {email}"}]
+def list_customer_orders(runtime: ToolRuntime) -> list[dict]:
+    """List all orders of the signed-in customer. Takes no arguments."""
+    return orders.list_for(_customer(runtime))
 
 
 @tool
-def cancel_order(order_id: str) -> dict:
-    """Cancel an order. Only allowed while the order status is 'processing'."""
-    oid = order_id.strip().upper()
-    with db.connect() as conn:
-        row = conn.execute("SELECT status FROM orders WHERE order_id = ?", (oid,)).fetchone()
-        if not row:
-            return {"error": f"No order found with ID {order_id}"}
-        if row["status"] != "processing":
-            return {"error": f"Cannot cancel: order is already '{row['status']}'."}
-        conn.execute("UPDATE orders SET status = 'cancelled' WHERE order_id = ?", (oid,))
-    return {"order_id": oid, "status": "cancelled"}
+def cancel_order(order_id: str, runtime: ToolRuntime) -> dict:
+    """Cancel one of the signed-in customer's orders. Only allowed while its status is 'processing'."""
+    return orders.cancel(_customer(runtime), order_id)
 
 
 # ---------- FAQ agent tool ----------
@@ -68,15 +65,13 @@ def search_faq(query: str) -> list[dict]:
     return [item for _, item in scored[:2]] or [{"error": "No matching FAQ entry."}]
 
 
-# ---------- Escalation tool ----------
-@tool
-def create_escalation_ticket(summary: str, customer_email: str = "") -> dict:
-    """Create a ticket for a human support agent. Use when the customer is upset,
-    asks for a human, or the issue can't be solved with the other tools."""
+# ---------- Escalation (plain functions, not LLM tools: the graph decides when to escalate) ----------
+def create_ticket(summary: str, customer_email: str = "", thread_id: str | None = None) -> dict:
+    """Open a ticket for a human agent and remember which conversation to resume when they reply."""
     with db.connect() as conn:
         cur = conn.execute(
-            "INSERT INTO tickets (customer_email, summary) VALUES (?, ?)",
-            (customer_email or None, summary),
+            "INSERT INTO tickets (customer_email, summary, thread_id) VALUES (?, ?, ?)",
+            (customer_email or None, summary, thread_id),
         )
         ticket_id = cur.lastrowid
     return {"ticket_id": ticket_id, "status": "open"}
