@@ -2,117 +2,144 @@
 
 [![CI](https://github.com/sakshi1801/multi-agent-customer-support/actions/workflows/ci.yml/badge.svg)](https://github.com/sakshi1801/multi-agent-customer-support/actions/workflows/ci.yml)
 
-A supervisor-based multi-agent system built with **LangGraph**, served via **FastAPI**. A supervisor LLM routes each customer message to specialist agents (orders, FAQ, escalation). Escalations pause the graph and wait for a **human agent** (human-in-the-loop), then resume.
+A customer-support assistant built with **LangGraph** and **FastAPI**. A supervisor reads each message and
+sends it to specialist agents: **Orders** (tool calling against a database), **FAQ** (retrieval-augmented
+answers that cite their source) and **Escalation**, which pauses the conversation for a **human agent** and
+resumes it when they reply. It runs entirely on **free tiers** (Groq or OpenRouter) or a local model (Ollama).
 
-**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Groq / OpenRouter / Ollama / OpenAI / Azure OpenAI · LangSmith · pytest · Ruff · Docker · GitHub Actions
+**Stack:** Python · LangGraph · LangChain · FastAPI · Pydantic · SQLite · Chroma · FastEmbed · Groq / OpenRouter / Ollama / OpenAI / Azure OpenAI · pytest · Ruff · Docker · GitHub Actions
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    C[Customer] -->|POST /chat| S{Supervisor LLM<br/>structured output}
-    S -->|orders| O[Orders agent<br/>get_order_status / list_orders / cancel_order]
-    S -->|faq| F[FAQ agent<br/>search_faq]
+    C[Customer<br/>signed token] -->|POST /chat| G{Guard<br/>optional}
+    G --> S{Supervisor<br/>structured output}
+    S -->|orders| O[Orders agent<br/>tools read identity from graph state]
+    S -->|faq| F[FAQ agent<br/>RAG: Chroma + local embeddings]
     S -->|escalation| E[Create ticket]
     E --> H[[Human review<br/>interrupt]]
     O --> S
     F --> S
     H --> S
-    S -->|FINISH| R[Replies to customer]
-    A[Human agent] -->|POST /tickets/thread/reply| H
+    S -->|done| W[Wrap-up<br/>greetings and off-topic]
+    A[Human agent<br/>X-API-Key] -->|POST /tickets/id/reply| H
 ```
+
+Two supervisor designs are implemented and compared in the evaluation: **loop** (ask the model who goes next
+after every specialist) and **plan** (ask once for every specialist the message needs).
 
 ## What this demonstrates
 
-- **Supervisor pattern**: the router is a LangChain Runnable chain (`prompt | llm.with_structured_output(Route)`) that returns a validated Pydantic `Route`, not free text.
-- **Tool calling with server-side identity**: order tools read *who the customer is* from the graph state (`ToolRuntime`), a value set from a signed login token. The model never sees or chooses it, so it cannot be talked into reading another customer's orders.
-- **Multi-agent in one turn**: "Status of ORD-1005 and what's your return policy?" visits Orders, then FAQ. Each specialist sees only its own context and a specialist never runs twice for one message.
-- **Human-in-the-loop**: `interrupt()` + a SQLite checkpointer pause the conversation (it survives a server restart); a human agent replies by ticket ID and `Command(resume=...)` continues it.
-- **Resilience**: provider fallbacks (`.with_fallbacks()`: e.g. Groq, then OpenRouter) and graceful degradation: if routing fails the customer is handed to a human instead of getting a 500.
-- **Free to run**: works with Groq or OpenRouter free tiers, or a local Ollama model.
-- **Testable**: 67 tests run with a deterministic fake LLM, so CI needs no API key. They include a security suite of prompt-injection and cross-customer attacks.
+- **Supervisor pattern** built as a LangChain Runnable chain: `prompt | llm.with_structured_output(Route or Plan)`.
+- **Tool calling with server-side identity**: order tools read *who the customer is* from the graph state (`ToolRuntime`), set from a signed login token. The model never sees or chooses it, so it cannot be talked into reading another customer's orders.
+- **RAG over a 41-section knowledge base**: document loader, heading-based splitter, local ONNX embeddings, Chroma vector store, retrievers compared on a labelled question set; answers cite `[Topic > Section]`.
+- **Human-in-the-loop**: `interrupt()` + a SQLite checkpointer pause the conversation (it survives a server restart); a human replies by ticket ID and `Command(resume=...)` continues it.
+- **Resilience**: retries, provider fallbacks (`.with_fallbacks()`), and graceful degradation: if routing fails the customer is handed to a human instead of getting a 500.
+- **Measured, not assumed**: a 132-case labelled evaluation with confidence intervals, an end-to-end suite that checks facts, data leaks and database state, and a retrieval benchmark.
+- **Free to run**: Groq free tier, OpenRouter `:free` models, or a local Ollama model; local embeddings.
+
+## Results
+
+Full tables, methodology and the raw files: **[docs/EVALUATION.md](docs/EVALUATION.md)**.
+
+<!-- RESULTS-START -->
+_See docs/EVALUATION.md._
+<!-- RESULTS-END -->
 
 ## Quick start
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scriptsctivate
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env     # add ONE model key (Groq / OpenRouter are free) plus TOKEN_SECRET and AGENT_API_KEY
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/docs for the interactive API.
+Open http://localhost:8000/ for the demo page (customer chat and human-agent console), or
+http://localhost:8000/docs for the API. The first start downloads a small embedding model (about 130 MB, once).
 
-### Try it
+### Try it from the command line
 
 Demo customers `asha@example.com`, `ravi@example.com` and `meera@example.com` all use the password `demo1234` (fake data only).
 
 ```bash
-# 0. Log in -> a signed token (identity comes from this token, never from the message)
-TOKEN=$(curl -s localhost:8000/auth/login -H 'content-type: application/json'   -d '{"email":"asha@example.com","password":"demo1234"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+# Log in -> a signed token (identity comes from this token, never from the message)
+TOKEN=$(curl -s localhost:8000/auth/login -H 'content-type: application/json' \
+  -d '{"email":"asha@example.com","password":"demo1234"}' | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# 1. Order lookup (own orders only)
-curl -s localhost:8000/chat -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'   -d '{"message":"Where is ORD-1001?"}'
+# Two specialists in one message
+curl -s localhost:8000/chat -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"message":"Status of ORD-1002, and how long do refunds take?"}'
 
-# 2. Two specialists in one turn
-curl -s localhost:8000/chat -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'   -d '{"message":"Status of ORD-1002, and what is your return policy?"}'
-
-# 3. Policy questions need no login
-curl -s localhost:8000/chat -H 'content-type: application/json' -d '{"message":"How long does express shipping take?"}'
-
-# 4. Escalation -> status "waiting_for_human" and a ticket_id
-curl -s localhost:8000/chat -H "authorization: Bearer $TOKEN" -H 'content-type: application/json'   -d '{"message":"This is unacceptable, I want a human"}'
-
-# 5. A human agent (X-API-Key = AGENT_API_KEY from .env) lists tickets and replies by ticket ID
+# Escalation -> status "waiting_for_human" and a ticket_id; a human agent then replies
+curl -s localhost:8000/chat -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"message":"This is unacceptable, I want a human"}'
 curl -s localhost:8000/tickets -H "x-api-key: $AGENT_API_KEY"
-curl -s localhost:8000/tickets/1/reply -H "x-api-key: $AGENT_API_KEY" -H 'content-type: application/json'   -d '{"reply":"Sorry about that! We are sending a replacement."}'
+curl -s localhost:8000/tickets/1/reply -H "x-api-key: $AGENT_API_KEY" -H 'content-type: application/json' \
+  -d '{"reply":"Sorry about that! We are sending a replacement."}'
 ```
 
-Demo data: orders `ORD-1001` to `ORD-1005` spread over the three customers.
+## Configuration
 
-## Tests, Docker, tracing
+| Variable | Meaning |
+|---|---|
+| `GROQ_API_KEY`, `GROQ_MODEL` | free hosted models (`qwen/qwen3.8-27b`, `openai/gpt-oss-120b`, ...) |
+| `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | free models with a `:free` suffix |
+| `LLM_BASE_URL`, `LLM_MODEL` | any OpenAI-compatible server, e.g. local Ollama (`http://localhost:11434/v1`) |
+| `LLM_PROVIDER`, `LLM_FALLBACKS` | pick a provider explicitly; providers to try when the main one fails |
+| `SUPERVISOR_MODE` | `plan` (one routing call per message) or `loop` |
+| `TOKEN_SECRET`, `AGENT_API_KEY` | signs login tokens; password of the human-agent endpoints |
+| `GUARD=promptguard` | optional Llama Prompt Guard layer (free on Groq) |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY` | optional tracing of every supervisor decision and tool call |
+
+## Tests and evaluation
 
 ```bash
-pip install -r requirements-dev.txt         # adds pytest and ruff
-pytest -q                                   # 67 tests, no API key needed
+pip install -r requirements-dev.txt
+pytest -q                                   # 120+ tests, no API key and no model download needed
 ruff check . && ruff format --check .       # lint + formatting (also run in CI)
-docker build -t support-agents . && docker run --env-file .env -p 8000:8000 support-agents
+python -m evals.run_eval routing --router keyword                    # offline floor
+python -m evals.run_eval routing --provider groq --model qwen/qwen3.8-27b --supervisor plan --label planner
+python -m evals.retrieval_eval                                       # retrieval comparison, local and free
+python -m evals.summary                                              # rebuild docs/EVALUATION.md
 ```
 
-Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` in `.env` to see every supervisor decision and tool call in LangSmith.
+CI also builds the Docker image and smoke-tests the running container. Deployment on free hosting: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Security model
 
 | Threat | Defence |
 |---|---|
-| Customer reads or cancels another customer's order, including through prompt injection | The customer comes from the signed token and is injected into the tools; every SQL query filters on it; the LLM-visible tool schema has no identity argument. Another customer's order looks identical to a missing one. |
+| Customer reads or cancels another customer's order, including through prompt injection | The customer comes from the signed token and is injected into the tools; every SQL query filters on it; the model-visible tool schema has no identity argument. Another customer's order looks identical to a missing one. |
+| Blunt prompt injection | Optional Llama Prompt Guard layer, measured: it is an extra layer, not the defence (see the evaluation) |
 | Forged, expired or tampered tokens | HMAC-signed tokens with expiry, constant-time comparison |
-| Continuing someone else's conversation by guessing its thread ID | Threads are bound to their owner (403 otherwise) |
+| Reading or continuing someone else's conversation | Threads are bound to their owner; unknown and foreign threads look the same |
 | Anyone calling the human-agent endpoints | `X-API-Key` required; the endpoints stay closed if no key is configured |
-| Model outage | Provider fallbacks, then escalation to a human, then a clean 503 without internals |
+| Model outage | Retries, provider fallbacks, then escalation to a human, then a clean 503 without internals |
+| Model output rendered in the browser | The demo page inserts model text with `textContent` only, never as HTML |
 
 ## Project layout
 
 ```
-app/config.py   LLM setup: any OpenAI-compatible provider (Groq, OpenRouter, Ollama, OpenAI, Azure) + fallbacks
-app/auth.py     password hashing, signed tokens, agent API key
-app/db.py       SQLite schema + demo data
-app/orders.py   order operations, always scoped to one customer
-app/tools.py    agent tools (thin wrappers that read the customer from graph state)
-app/graph.py    supervisor + specialists + human-in-the-loop
-app/main.py     FastAPI endpoints and schemas
-tests/          fake-LLM tests for tools, routing, escalation, security, API
-docs/           development plan
+app/config.py     providers (any OpenAI-compatible), fallbacks, retrieval settings
+app/auth.py       password hashing, signed tokens, agent API key
+app/orders.py     order operations, always scoped to one customer
+app/tools.py      agent tools (thin wrappers that read the customer from graph state)
+app/rag.py        loader, splitter, embeddings, Chroma, retrievers
+app/graph.py      supervisor (loop and plan), specialists, human-in-the-loop
+app/guard.py      optional prompt-injection guard
+app/main.py       FastAPI endpoints, demo page route
+app/static/       the demo page (one self-contained HTML file)
+data/kb/          the knowledge base (Markdown)
+evals/            dataset, harness, retrieval and guard evaluations, results
+tests/            fake-LLM tests: tools, routing, planner, RAG, security, API, harness
+docs/             development plan, evaluation results, interview notes, deployment guide
 ```
 
-## Evaluation
+## Known limitations
 
-> Filled in after Phase 2 (see [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)):
-> routing accuracy on N hand-written test messages: **__ / __**.
-
-## Known limitations / next steps
-
-See [docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md) for the full roadmap.
-
-- The FAQ search is keyword-based; Phase 3 replaces it with retrieval over embeddings (RAG).
+- Demo data: the store, its policies and the orders are invented.
 - Login has no rate limiting or password reset; the human-agent key is shared (a real deployment would use SSO).
+- SQLite suits one instance; scaling out needs Postgres for state and a vector database for retrieval.
+- Free-tier models are rate limited and change over time; results are dated and tied to a commit.

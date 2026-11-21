@@ -32,7 +32,9 @@ GUARD = os.getenv(
     "GUARD", ""
 )  # "promptguard" = refuse blunt prompt injection (Llama Prompt Guard 2 on Groq, free)
 GUARD_THRESHOLD = float(os.getenv("GUARD_THRESHOLD", "0.5"))
-SUPERVISOR_MODE = os.getenv("SUPERVISOR_MODE", "loop")  # "loop" (ask after every step) or "plan" (ask once)
+SUPERVISOR_MODE = os.getenv(
+    "SUPERVISOR_MODE", "plan"
+)  # "plan" (ask once; measured better) or "loop" (ask after every step)
 KB_DIR = os.getenv("KB_DIR", "data/kb")  # knowledge-base Markdown files for the FAQ agent (RAG)
 # Retrieval settings, chosen from evals/results/retrieval.md: plain vector search beat BM25 and hybrid fusion,
 # and a cosine-similarity cutoff makes the agent say "not sure" for questions the knowledge base cannot answer.

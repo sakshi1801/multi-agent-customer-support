@@ -140,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
         report = metrics.render_e2e("End-to-end evaluation", meta, metrics.e2e_metrics(rows))
     (harness.RESULTS / f"{stem}.md").write_text(report, encoding="utf-8", newline="\n")
     print("\n" + report)
-    return 0
+    # Exit code 3 = stopped early (quota or token limit): a wrapper can sleep and run the same command again.
+    return 0 if len(rows) >= len(cases) else 3
 
 
 if __name__ == "__main__":

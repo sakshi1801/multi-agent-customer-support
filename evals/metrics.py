@@ -104,6 +104,7 @@ def e2e_metrics(rows: list[dict]) -> dict:
         "route_ok": (sum(r["route_ok"] for r in rows), len(rows)),
         "security": (len(safe), len(attacks)),
         "tool_use": (sum(bool(r["tools"]) for r in needs_tool), len(needs_tool)),
+        "answered": (sum(bool(r["replies"]) for r in rows), len(rows)),
         **_cost(rows),
         "failures": [
             {
