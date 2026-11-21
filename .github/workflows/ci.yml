@@ -15,3 +15,23 @@ jobs:
         run: ruff check . && ruff format --check .
       - name: Test
         run: pytest -q
+
+  docker:
+    # Builds the production image and checks that the container really starts and serves.
+    # No API key is needed: nothing in this job calls a model.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build -t support-agents .
+      - name: Smoke test
+        run: |
+          docker run -d --name app -p 8000:8000 \
+            -e GROQ_API_KEY=ci-dummy -e AGENT_API_KEY=ci-agent -e TOKEN_SECRET=ci-secret support-agents
+          for i in $(seq 1 60); do curl -fsS localhost:8000/health && break; sleep 2; done
+          curl -fsS localhost:8000/health
+          curl -fsS localhost:8000/ | grep -q "Support Desk Demo"
+          curl -fsS -X POST localhost:8000/auth/login -H 'content-type: application/json' \
+            -d '{"email":"asha@example.com","password":"demo1234"}' | grep -q access_token
+          curl -sS -o /dev/null -w '%{http_code}\n' localhost:8000/tickets | grep -q 401   # agent endpoints stay closed
+          docker logs app

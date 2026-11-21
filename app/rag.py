@@ -12,6 +12,7 @@ The FAQ agent only sees the chunks this module returns, and cites them as "[Topi
 """
 
 import math
+import os
 import re
 import uuid
 from collections.abc import Iterator
@@ -19,7 +20,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from langchain_chroma import Chroma
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")  # Chroma's usage telemetry fails noisily when offline
+
+from langchain_chroma import Chroma  # noqa: E402
 from langchain_core.document_loaders import BaseLoader
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
