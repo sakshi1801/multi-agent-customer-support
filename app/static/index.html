@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Desk Demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5d6778; --line: #dfe3ea;
+    --brand: #2457d6; --brand-ink: #ffffff; --me: #e8efff; --warn-bg: #fff4d6; --warn-ink: #6b4e00;
+    --ok: #1f7a4d; --bad: #b3261e;
+    --orders: #0b6b8a; --faq: #6b3fa0; --escalation: #b3261e; --human: #1f7a4d; --assistant: #5d6778;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11151c; --panel: #1a2029; --ink: #e8ecf3; --muted: #9aa5b8; --line: #2b3441;
+      --brand: #6b93ff; --brand-ink: #0c1220; --me: #22304f; --warn-bg: #3a2f10; --warn-ink: #f1d58a;
+      --ok: #5fd39a; --bad: #ff8a80; --orders: #5cc3e4; --faq: #c4a1f2; --escalation: #ff8a80; --human: #5fd39a; --assistant: #9aa5b8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 17px; }
+  header span { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 4px; padding: 10px 16px 0; max-width: 960px; margin: 0 auto; }
+  nav button { border: 1px solid var(--line); border-bottom: none; background: transparent; color: var(--muted); padding: 8px 14px; border-radius: 8px 8px 0 0; cursor: pointer; font: inherit; }
+  nav button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 600; }
+  main { max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 0 10px 10px 10px; padding: 16px; }
+  [hidden] { display: none !important; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  label { color: var(--muted); font-size: 13px; }
+  input, select, textarea, button { font: inherit; color: var(--ink); }
+  input, select, textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  input[type=text], input[type=password] { min-width: 0; flex: 1 1 160px; }
+  button.primary { background: var(--brand); color: var(--brand-ink); border: 0; border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 600; }
+  button.ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+  #log { height: 380px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 82%; padding: 8px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.me { align-self: flex-end; background: var(--me); }
+  .who { display: block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 2px; }
+  .who.orders { color: var(--orders); } .who.faq { color: var(--faq); } .who.escalation { color: var(--escalation); }
+  .who.human_agent { color: var(--human); } .who.assistant, .who.customer { color: var(--assistant); }
+  .banner { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 8px 12px; margin: 10px 0; font-size: 14px; }
+  .error { color: var(--bad); font-size: 14px; margin: 6px 0; }
+  .tickets { display: grid; gap: 8px; margin: 10px 0; }
+  .ticket { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; background: var(--bg); }
+  .ticket[aria-current="true"] { border-color: var(--brand); }
+  .ticket b { display: block; }
+  .ticket small { color: var(--muted); }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Support Desk Demo</h1>
+  <span>Multi-agent customer support: a LangGraph supervisor, order and FAQ specialists, and human handoff</span>
+</header>
+<nav role="tablist">
+  <button role="tab" id="tab-customer" aria-selected="true">Customer chat</button>
+  <button role="tab" id="tab-agent" aria-selected="false">Human agent console</button>
+</nav>
+<main>
+  <!-- ============ customer ============ -->
+  <section id="customer" role="tabpanel">
+    <div class="row">
+      <label for="who">Sign in as</label>
+      <select id="who">
+        <option value="">Not signed in (policy questions only)</option>
+        <option value="asha@example.com">asha@example.com (ORD-1001, ORD-1002)</option>
+        <option value="ravi@example.com">ravi@example.com (ORD-1003, ORD-1004)</option>
+        <option value="meera@example.com">meera@example.com (ORD-1005)</option>
+      </select>
+      <button class="ghost" id="new-chat">New conversation</button>
+    </div>
+    <p class="hint">Demo accounts use the password <code>demo1234</code> and fake data. Try: <em>"Where is ORD-1002?"</em>, <em>"What is your return policy?"</em>, <em>"Status of ORD-1001 and how long do refunds take?"</em>, <em>"This is unacceptable, I want a human"</em>, or sign in as Ravi and ask for Asha's <em>ORD-1002</em>.</p>
+    <div id="log" aria-live="polite"></div>
+    <div id="waiting" class="banner" hidden>Waiting for a human agent. Switch to the "Human agent console" tab and reply to ticket <b id="ticket-no"></b>; the answer appears here.</div>
+    <div id="chat-error" class="error" role="alert"></div>
+    <form id="chat-form" class="row" style="margin-top:10px">
+      <input type="text" id="message" placeholder="Type a message" maxlength="2000" autocomplete="off" required>
+      <button class="primary" id="send">Send</button>
+    </form>
+  </section>
+
+  <!-- ============ human agent ============ -->
+  <section id="agent" role="tabpanel" hidden>
+    <p class="hint">Human agents authenticate with the server's <code>AGENT_API_KEY</code> (from the <code>.env</code> file). The key stays in this page's memory only.</p>
+    <div class="row">
+      <label for="key">Agent API key</label>
+      <input type="password" id="key" autocomplete="off">
+      <button class="ghost" id="refresh">Load open tickets</button>
+    </div>
+    <div id="agent-error" class="error" role="alert"></div>
+    <div id="tickets" class="tickets"></div>
+    <div id="reply-box" hidden>
+      <label for="reply">Reply to ticket <b id="reply-ticket"></b></label>
+      <textarea id="reply" maxlength="2000"></textarea>
+      <div class="row" style="margin-top:8px"><button class="primary" id="send-reply">Send reply and resume the conversation</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const state = { token: "", threadId: "", poll: null, ticket: null };
+
+  // ---- tabs ----
+  for (const name of ["customer", "agent"]) {
+    $("tab-" + name).addEventListener("click", () => {
+      for (const n of ["customer", "agent"]) {
+        $(n).hidden = n !== name;
+        $("tab-" + n).setAttribute("aria-selected", String(n === name));
+      }
+      if (name === "agent" && $("key").value) loadTickets();
+    });
+  }
+
+  // ---- helpers ----
+  async function api(path, options = {}) {
+    const res = await fetch(path, options);
+    let body = null;
+    try { body = await res.json(); } catch (_) { /* empty body */ }
+    if (!res.ok) throw new Error((body && body.detail) || res.status + " " + res.statusText);
+    return body;
+  }
+  // Model output is untrusted text: only ever inserted with textContent, never as HTML.
+  function bubble(agent, content) {
+    const div = document.createElement("div");
+    div.className = "msg" + (agent === "customer" ? " me" : "");
+    const who = document.createElement("span");
+    who.className = "who " + agent;
+    who.textContent = agent === "customer" ? "You" : agent.replace("_", " ");
+    const text = document.createElement("div");
+    text.textContent = content;
+    div.append(who, text);
+    return div;
+  }
+  function render(lines) {
+    const log = $("log");
+    log.replaceChildren(...lines.map((l) => bubble(l.agent, l.content)));
+    log.scrollTop = log.scrollHeight;
+  }
+  function setWaiting(ticket) {
+    const waiting = ticket != null;
+    $("waiting").hidden = !waiting;
+    $("ticket-no").textContent = waiting ? "#" + ticket : "";
+    $("message").disabled = $("send").disabled = waiting;
+    if (waiting && !state.poll) state.poll = setInterval(refreshThread, 3000);
+    if (!waiting && state.poll) { clearInterval(state.poll); state.poll = null; }
+  }
+  function authHeaders() { return state.token ? { Authorization: "Bearer " + state.token } : {}; }
+
+  async function refreshThread() {
+    if (!state.threadId) return;
+    try {
+      const t = await api("/threads/" + state.threadId, { headers: authHeaders() });
+      render(t.messages);
+      setWaiting(t.status === "waiting_for_human" ? t.ticket_id : null);
+    } catch (e) { $("chat-error").textContent = e.message; }
+  }
+
+  // ---- customer: sign in, chat ----
+  async function signIn() {
+    resetChat();
+    const email = $("who").value;
+    state.token = "";
+    if (!email) return;
+    try {
+      const r = await api("/auth/login", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: "demo1234" }) });
+      state.token = r.access_token;
+    } catch (e) { $("chat-error").textContent = "Sign-in failed: " + e.message; }
+  }
+  function resetChat() {
+    state.threadId = "";
+    $("log").replaceChildren();
+    $("chat-error").textContent = "";
+    setWaiting(null);
+  }
+  $("who").addEventListener("change", signIn);
+  $("new-chat").addEventListener("click", resetChat);
+
+  $("chat-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const message = $("message").value.trim();
+    if (!message) return;
+    $("chat-error").textContent = "";
+    $("send").disabled = true;
+    $("log").append(bubble("customer", message));
+    $("log").scrollTop = $("log").scrollHeight;
+    $("message").value = "";
+    try {
+      const body = { message };
+      if (state.threadId) body.thread_id = state.threadId;
+      const r = await api("/chat", { method: "POST", headers: { "Content-Type": "application/json", ...authHeaders() }, body: JSON.stringify(body) });
+      state.threadId = r.thread_id;
+      await refreshThread();
+    } catch (e) { $("chat-error").textContent = e.message; }
+    finally { if (!state.poll) { $("send").disabled = false; $("message").focus(); } }
+  });
+
+  // ---- human agent ----
+  function agentHeaders() { return { "X-API-Key": $("key").value }; }
+  async function loadTickets() {
+    $("agent-error").textContent = "";
+    try {
+      const tickets = await api("/tickets", { headers: agentHeaders() });
+      const box = $("tickets");
+      box.replaceChildren();
+      if (!tickets.length) { const p = document.createElement("p"); p.className = "hint"; p.textContent = "No open tickets."; box.append(p); }
+      for (const t of tickets) {
+        const d = document.createElement("div");
+        d.className = "ticket"; d.tabIndex = 0;
+        d.setAttribute("aria-current", String(state.ticket === t.ticket_id));
+        const title = document.createElement("b"); title.textContent = "Ticket #" + t.ticket_id + " - " + (t.customer_email || "anonymous visitor");
+        const body = document.createElement("small"); body.textContent = t.summary;
+        d.append(title, body);
+        const pick = () => { state.ticket = t.ticket_id; $("reply-box").hidden = false; $("reply-ticket").textContent = "#" + t.ticket_id; loadTickets(); $("reply").focus(); };
+        d.addEventListener("click", pick);
+        d.addEventListener("keydown", (e) => { if (e.key === "Enter") pick(); });
+        box.append(d);
+      }
+      if (!tickets.some((t) => t.ticket_id === state.ticket)) { state.ticket = null; $("reply-box").hidden = true; }
+    } catch (e) { $("agent-error").textContent = e.message; }
+  }
+  $("refresh").addEventListener("click", loadTickets);
+  $("send-reply").addEventListener("click", async () => {
+    const reply = $("reply").value.trim();
+    if (!reply || state.ticket == null) return;
+    $("agent-error").textContent = "";
+    try {
+      await api("/tickets/" + state.ticket + "/reply", { method: "POST", headers: { "Content-Type": "application/json", ...agentHeaders() }, body: JSON.stringify({ reply }) });
+      $("reply").value = ""; state.ticket = null; $("reply-box").hidden = true;
+      await loadTickets();
+    } catch (e) { $("agent-error").textContent = e.message; }
+  });
+})();
+</script>
+</body>
+</html>

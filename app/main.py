@@ -2,6 +2,9 @@
 
 POST /auth/login               customer logs in -> signed bearer token
 POST /chat                     customer sends a message (token optional: anonymous users get the FAQ only)
+GET  /threads/{thread_id}      the whole conversation, for the customer who owns it (the UI polls this
+                               to show a human agent's reply as soon as it arrives)
+GET  /                         demo web page (customer chat + human-agent console)
 GET  /tickets                  open tickets, for the human-agent dashboard        [X-API-Key]
 POST /tickets/{id}/reply       a human agent answers an escalated ticket          [X-API-Key]
 GET  /health
@@ -14,15 +17,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from app import auth, config, db
+from app import auth, config, db, rag
 from app.graph import build_graph
 
 logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 # ---------- schemas (structured outputs) ----------
@@ -51,6 +57,18 @@ class ChatResponse(BaseModel):
     status: str  # 'answered' | 'waiting_for_human'
     replies: list[AgentReply]
     ticket_id: int | None = None
+
+
+class TranscriptLine(BaseModel):
+    agent: str  # "customer" or the name of the agent that wrote it
+    content: str
+
+
+class Transcript(BaseModel):
+    thread_id: str
+    status: str
+    ticket_id: int | None = None
+    messages: list[TranscriptLine]
 
 
 class HumanReply(BaseModel):
@@ -116,6 +134,8 @@ def create_app(graph=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         db.init_db()
+        if graph is None:  # real run: load the embedding model now, not during the first customer question
+            rag.get_kb(config.KB_DIR, config.RAG_EMBEDDINGS, config.RAG_RERANK)
         app.state.graph = graph or _sqlite_graph()
         yield
 
@@ -153,6 +173,8 @@ def create_app(graph=None) -> FastAPI:
                     # Per-message state is reset on every turn.
                     "hops": 0,
                     "visited": [],
+                    "plan": [],
+                    "planned": False,
                     "ticket_id": None,
                     "customer_email": customer_email,
                 },
@@ -164,6 +186,32 @@ def create_app(graph=None) -> FastAPI:
                 503, "The assistant is temporarily unavailable. Please try again shortly."
             ) from exc
         return _response(g, run_config, thread_id)
+
+    @app.get("/threads/{thread_id}", response_model=Transcript)
+    def thread(thread_id: str, customer_email: str = Depends(current_customer)):
+        g = app.state.graph
+        snap = g.get_state({"configurable": {"thread_id": thread_id}})
+        messages = snap.values.get("messages", [])
+        # Unknown thread and someone else's thread look the same, so thread ids cannot be probed.
+        if not messages or snap.values.get("customer_email", "") != customer_email:
+            raise HTTPException(404, "No such conversation.")
+        lines = [
+            TranscriptLine(
+                agent="customer" if isinstance(m, HumanMessage) else m.name, content=str(m.content)
+            )
+            for m in messages
+            if isinstance(m, HumanMessage) or (isinstance(m, AIMessage) and m.name)
+        ]
+        return Transcript(
+            thread_id=thread_id,
+            status="waiting_for_human" if snap.next else "answered",
+            ticket_id=snap.values.get("ticket_id"),
+            messages=lines,
+        )
+
+    @app.get("/", include_in_schema=False)
+    def home():
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/tickets", response_model=list[Ticket], dependencies=[Depends(require_agent_key)])
     def open_tickets():

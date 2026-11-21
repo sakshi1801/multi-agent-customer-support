@@ -236,3 +236,33 @@ def test_paused_escalation_survives_a_restart(tmp_path, temp_db):
             f"/tickets/{r['ticket_id']}/reply", json={"reply": "Back online, sorry!"}, headers=AGENT_HEADERS
         ).json()
     assert done["status"] == "answered" and "Back online" in done["replies"][-1]["content"]
+
+
+# ---------- transcript endpoint + home page (used by the demo UI) ----------
+def test_customer_can_read_their_transcript_and_sees_the_human_reply(client):
+    asha = login(client, "asha@example.com")
+    r = client.post("/chat", json={"message": "I want a human"}, headers=asha).json()
+    waiting = client.get(f"/threads/{r['thread_id']}", headers=asha).json()
+    assert waiting["status"] == "waiting_for_human" and waiting["ticket_id"] == r["ticket_id"]
+    assert [m["agent"] for m in waiting["messages"]] == ["customer", "escalation"]
+
+    client.post(f"/tickets/{r['ticket_id']}/reply", json={"reply": "On it!"}, headers=AGENT_HEADERS)
+    done = client.get(f"/threads/{r['thread_id']}", headers=asha).json()
+    assert done["status"] == "answered"
+    assert done["messages"][-1] == {"agent": "human_agent", "content": "On it!"}
+
+
+def test_transcript_is_private_and_unknown_threads_look_the_same(client):
+    asha = login(client, "asha@example.com")
+    thread = client.post("/chat", json={"message": "Where is ORD-1001?"}, headers=asha).json()["thread_id"]
+    ravi = login(client, "ravi@example.com")
+    assert client.get(f"/threads/{thread}", headers=ravi).status_code == 404
+    assert client.get(f"/threads/{thread}").status_code == 404  # anonymous
+    assert client.get("/threads/does-not-exist", headers=asha).status_code == 404
+
+
+def test_home_page_is_served_and_renders_model_text_safely(client):
+    page = client.get("/")
+    assert page.status_code == 200 and "text/html" in page.headers["content-type"]
+    assert "Human agent console" in page.text and "Customer chat" in page.text
+    assert "innerHTML" not in page.text  # model output is untrusted: only textContent is used
